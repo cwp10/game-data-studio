@@ -99,13 +99,6 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
                   </div>
                 </div>
               ))}
-              <div
-                className="border border-dashed border-[#2a2a2f] rounded-xl flex flex-col items-center justify-center gap-2 min-h-[140px] text-[#3a3a42] cursor-pointer hover:border-[#7c3aed]/40 hover:text-[#6b6b77] transition-colors"
-                onClick={() => setShowModal(true)}
-              >
-                <div className="text-xl">＋</div>
-                <div className="text-[11px]">새 프로젝트</div>
-              </div>
             </div>
           </>
         )}
