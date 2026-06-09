@@ -7,10 +7,10 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
   { id: "home",       Icon: Home,         label: "프로젝트" },
   { id: "schema",     Icon: Table2,       label: "스키마" },
   { id: "editor",     Icon: Database,     label: "데이터" },
+  { id: "types",      Icon: Tags,         label: "타입" },
   { id: "balance",    Icon: BarChart2,    label: "밸런싱" },
   { id: "simulation", Icon: Play,         label: "시뮬레이션" },
   { id: "economy",    Icon: Coins,        label: "경제" },
-  { id: "types",      Icon: Tags,         label: "타입" },
   { id: "memory",     Icon: NotebookText, label: "메모리" },
 ];
 
