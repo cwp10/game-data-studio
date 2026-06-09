@@ -1,5 +1,5 @@
 "use client";
-import { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import { ButtonHTMLAttributes, HTMLAttributes, ReactNode, useRef, useState } from "react";
 
 export function Btn({
   variant = "default",
@@ -13,6 +13,23 @@ export function Btn({
     success: "bg-[#16a34a] border-[#16a34a] text-white hover:bg-[#15803d]",
   };
   return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
+}
+
+export function Tooltip({ label, children }: { label: string; children: ReactNode }) {
+  const [visible, setVisible] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = () => { timer.current = setTimeout(() => setVisible(true), 600); };
+  const hide = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } setVisible(false); };
+  return (
+    <div className="relative inline-flex" onMouseEnter={show} onMouseLeave={hide}>
+      {children}
+      {visible && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-[#1e1e24] border border-[#2a2a2f] text-[#9a9aa3] text-[11px] rounded-md whitespace-nowrap z-50 pointer-events-none shadow-lg">
+          {label}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Badge({ variant, children }: { variant: "ssr" | "sr" | "r" | "n" | "danger" | "warn" | "success" | "info"; children: ReactNode }) {

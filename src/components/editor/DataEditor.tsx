@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save } from "lucide-react";
-import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select } from "@/components/ui";
+import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
@@ -320,12 +320,12 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* 툴바 */}
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1 flex-shrink-0">
-            <Btn title="선택 삭제" disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn>
+            <Tooltip label="선택 삭제"><Btn disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn></Tooltip>
             {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6] px-1">{selectedRowIds.size}행</span>}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Btn title="CSV 임포트" onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn>
+            <Tooltip label="CSV 임포트"><Btn onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn></Tooltip>
             <div className="relative">
-              <Btn title="내보내기" disabled={!selectedId} onClick={() => setShowExportMenu((v) => !v)}><Download size={11} /></Btn>
+              <Tooltip label="내보내기 (CSV / JSON)"><Btn disabled={!selectedId} onClick={() => setShowExportMenu((v) => !v)}><Download size={11} /></Btn></Tooltip>
               {showExportMenu && (
                 <div className="absolute top-full left-0 mt-1 bg-[#1a1a1f] border border-[#2a2a2f] rounded-lg shadow-xl z-50 py-1 min-w-[80px]" onMouseLeave={() => setShowExportMenu(false)}>
                   <button className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { csvExport(); setShowExportMenu(false); }}>CSV</button>
@@ -334,20 +334,22 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               )}
             </div>
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Btn title="스냅샷 저장" disabled={!selectedId} onClick={saveSnapshot}><Save size={11} /></Btn>
+            <Tooltip label="스냅샷 저장"><Btn disabled={!selectedId} onClick={saveSnapshot}><Save size={11} /></Btn></Tooltip>
             {snapshots.length > 0 && (
-              <select
-                className="bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#6b6b77] outline-none"
-                defaultValue=""
-                onChange={(e) => { if (e.target.value) restoreSnapshot(e.target.value, snapshots.find((s) => s.id === e.target.value)?.name ?? ""); e.target.value = ""; }}
-              >
-                <option value="">복원...</option>
-                {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <Tooltip label="스냅샷 복원">
+                <select
+                  className="bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#6b6b77] outline-none"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) restoreSnapshot(e.target.value, snapshots.find((s) => s.id === e.target.value)?.name ?? ""); e.target.value = ""; }}
+                >
+                  <option value="">복원...</option>
+                  {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Tooltip>
             )}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Btn title="곡선 생성" disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn>
-            <Btn title="AI 밸런스 분석" onClick={runBalance}><Sparkles size={11} /></Btn>
+            <Tooltip label="성장 곡선 생성"><Btn disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn></Tooltip>
+            <Tooltip label="AI 밸런스 분석"><Btn onClick={runBalance}><Sparkles size={11} /></Btn></Tooltip>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selectedId) return;
