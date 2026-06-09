@@ -4,7 +4,7 @@
   "description": "",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "lsof -ti:3001 | xargs kill -9 2>/dev/null; next dev -p 3001",
+    "dev": "lsof -ti:3001 | xargs kill -9 2>/dev/null; NODE_OPTIONS=--max-old-space-size=4096 next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
     "electron": "electron .",
