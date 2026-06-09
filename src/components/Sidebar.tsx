@@ -1,5 +1,5 @@
 "use client";
-import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText, Tags } from "lucide-react";
+import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText, Tags, Coins } from "lucide-react";
 import { type Screen } from "@/app/page";
 
 const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
@@ -8,6 +8,7 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
   { id: "editor",     Icon: Database,     label: "데이터" },
   { id: "balance",    Icon: BarChart2,    label: "밸런싱" },
   { id: "simulation", Icon: Play,         label: "시뮬레이션" },
+  { id: "economy",    Icon: Coins,        label: "경제" },
   { id: "types",      Icon: Tags,         label: "타입" },
   { id: "memory",     Icon: NotebookText, label: "메모리" },
 ];
