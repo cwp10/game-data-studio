@@ -4,24 +4,17 @@
   "description": "",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "lsof -ti:3001 | xargs kill -9 2>/dev/null; next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
     "electron": "electron .",
-    "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://localhost:3001 && electron .\"",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3001 && electron .\"",
     "init-db": "node --import tsx ./scripts/init-db.ts",
     "mcp": "node --import tsx ./src/lib/mcp/server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.2.2",
-      "onFail": "download"
-    }
-  },
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
