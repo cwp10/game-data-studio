@@ -99,7 +99,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* 좌측 시뮬레이션 목록 */}
-      <div className="w-[200px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
+      <div className="w-[170px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
         <PanelHeader>
           시뮬레이션
           <button className="text-[#6b6b77] hover:text-[#ededed] transition-colors" onClick={() => setSelectedSimId(null)}><Plus size={13} /></button>

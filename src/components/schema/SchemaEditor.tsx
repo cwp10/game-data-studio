@@ -23,6 +23,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
   const [bottomTab, setBottomTab] = useState<"chat" | "relations">("chat");
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
@@ -104,7 +105,8 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const tableRelations = relations.filter((r) => r.from_table_id === selectedId || r.to_table_id === selectedId);
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
       {/* 좌측 테이블 목록 */}
       <div className="w-[170px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
         <PanelHeader>
@@ -187,17 +189,26 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
             </tbody>
           </table>
         </div>
+        </div>
+      </div>
 
-        {/* 하단 탭 패널: 대화 | 관계 */}
-        <div className="h-[280px] border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]">
-          <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
-            <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
-            <BottomTab active={bottomTab === "relations"} onClick={() => setBottomTab("relations")}>
-              <Link2 size={12} />관계{tableRelations.length > 0 && <span className="ml-0.5 text-[#4a4a55]">{tableRelations.length}</span>}
-            </BottomTab>
-          </div>
+      {/* 하단 탭 패널 — 전체 폭(데이터 화면 기준). ChevronDown 으로 아래로 숨김 */}
+      <div className={`${bottomCollapsed ? "" : "h-[300px]"} border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]`}>
+        <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
+          <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
+          <BottomTab active={bottomTab === "relations"} onClick={() => setBottomTab("relations")}>
+            <Link2 size={12} />관계{tableRelations.length > 0 && <span className="ml-0.5 text-[#4a4a55]">{tableRelations.length}</span>}
+          </BottomTab>
+          <button
+            onClick={() => setBottomCollapsed((v) => !v)}
+            title={bottomCollapsed ? "펼치기" : "아래로 숨기기"}
+            className="ml-auto mr-1 text-[#6b6b77] hover:text-[#ededed] transition-colors p-1"
+          >
+            {bottomCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
 
-          {bottomTab === "chat" ? (
+        {!bottomCollapsed && (bottomTab === "chat" ? (
             <div className="flex-1 overflow-hidden">
               <ChatPanel
                 projectId={projectId}
@@ -220,9 +231,8 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
                 <div className="text-[11px] text-[#3a3a42] text-center py-6">설정된 관계가 없습니다 — 상단 &apos;관계 설정&apos;으로 추가하세요.</div>
               )}
             </div>
-          )}
+          ))}
         </div>
-      </div>
 
       <Modal open={showTableModal} onClose={() => setShowTableModal(false)} title="테이블 추가">
         <div className="space-y-3">

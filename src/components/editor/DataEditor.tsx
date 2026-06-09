@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
@@ -28,11 +28,13 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
   const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
   const fileRef = useRef<HTMLInputElement>(null);
+  const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadData = (tid: string) => Promise.all([
@@ -91,7 +93,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, id: row.id, data: newData }) });
     setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, data: newData } : r));
     setEditing(null);
-    runBalance();
+    scheduleBalance();
   };
 
   const runBalance = async () => {
@@ -101,13 +103,20 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setBalance(d.results ?? []);
   };
 
-  const getAnomaly = (rowId: string, col: string) => {
-    for (const b of balance) {
-      const a = b.anomalies.find((a) => a.row_id === rowId);
-      if (a && b.column === col) return a;
-    }
-    return null;
+  // 셀 편집마다 즉시 재분석하지 않고 연속 편집을 모아 한 번만 재계산한다(API 호출 폭주 방지).
+  const scheduleBalance = () => {
+    if (balanceTimer.current) clearTimeout(balanceTimer.current);
+    balanceTimer.current = setTimeout(() => { balanceTimer.current = null; runBalance(); }, 500);
   };
+  useEffect(() => () => { if (balanceTimer.current) clearTimeout(balanceTimer.current); }, []);
+
+  // 이상값을 (rowId:col) 키로 인덱싱해 셀 렌더링 시 O(1) 조회 (기존엔 셀마다 balance 전체 스캔).
+  const anomalyMap = useMemo(() => {
+    const m = new Map<string, Anomaly>();
+    for (const b of balance) for (const a of b.anomalies) m.set(`${a.row_id}:${b.column}`, a);
+    return m;
+  }, [balance]);
+  const getAnomaly = (rowId: string, col: string) => anomalyMap.get(`${rowId}:${col}`) ?? null;
 
   const GRADE_VALUES = new Set(["SSR", "SR", "R", "N"]);
   const renderCell = (col: Column, val: unknown) => {
@@ -186,7 +195,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex flex-1 overflow-hidden">
         {/* 좌측 테이블 목록 */}
-        <div className="w-[130px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
+        <div className="w-[170px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
           <PanelHeader>테이블</PanelHeader>
           <div className="overflow-auto flex-1">
             {tables.map((t) => (
@@ -291,15 +300,22 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         </div>
       </div>
 
-      {/* 하단 탭 패널: 대화 | 밸런싱 분석 | 차트 */}
-      <div className="h-[300px] border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]">
+      {/* 하단 탭 패널: 대화 | 밸런싱 분석 | 차트. ChevronDown 으로 아래로 숨김 */}
+      <div className={`${bottomCollapsed ? "" : "h-[300px]"} border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]`}>
         <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
           <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
           <BottomTab active={bottomTab === "balance"} onClick={() => setBottomTab("balance")}><BarChart3 size={12} />밸런싱 분석</BottomTab>
           <BottomTab active={bottomTab === "chart"} onClick={() => setBottomTab("chart")}><TrendingUp size={12} />차트</BottomTab>
+          <button
+            onClick={() => setBottomCollapsed((v) => !v)}
+            title={bottomCollapsed ? "펼치기" : "아래로 숨기기"}
+            className="ml-auto mr-1 text-[#6b6b77] hover:text-[#ededed] transition-colors p-1"
+          >
+            {bottomCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
         </div>
 
-        {bottomTab === "chart" ? (
+        {!bottomCollapsed && (bottomTab === "chart" ? (
           <div className="flex-1 overflow-auto p-3">
             {numericCols.length === 0 ? (
               <div className="flex items-center justify-center h-full text-[12px] text-[#4a4a55]">숫자 컬럼이 없습니다.</div>
@@ -385,7 +401,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           ) : <div className="text-[11px] text-[#3a3a42]">데이터 없음</div>}
         </div>
         </div>
-        )}
+        ))}
       </div>
 
       {/* 상태바 */}
