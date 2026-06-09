@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3 } from "lucide-react";
-import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab } from "@/components/ui";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp } from "lucide-react";
+import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { computeCurve, type CurveType } from "@/lib/curve/generate";
 import { type Screen } from "@/app/page";
 
 interface Table { id: string; name: string; }
@@ -24,6 +25,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance">("chat");
+  const [showCurve, setShowCurve] = useState(false);
+  const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
@@ -123,6 +126,28 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setDismissed((prev) => new Set(prev).add(anomKey(topAnomaly.row_id, topAnomaly.column)));
   };
 
+  // 성장 곡선 미리보기 (클라이언트 계산)
+  const curvePreview = (() => {
+    const base = Number(curve.base), factor = Number(curve.factor), count = Number(curve.count);
+    if (![base, factor, count].every(Number.isFinite) || count < 1) return [];
+    return computeCurve({ type: curve.type, base, factor, count: Math.min(count, 200) });
+  })();
+
+  const runCurve = async () => {
+    if (!selectedId || !curve.value_column.trim()) return;
+    const res = await fetch("/api/curve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table_id: selectedId, value_column: curve.value_column.trim(), level_column: curve.level_column.trim() || "level",
+        type: curve.type, base: Number(curve.base), factor: Number(curve.factor), count: Number(curve.count), replace: curve.replace,
+      }),
+    });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? "생성에 실패했습니다."); return; }
+    setShowCurve(false);
+    loadData(selectedId);
+    runBalance();
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex flex-1 overflow-hidden">
@@ -153,6 +178,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
               a.click();
             }}><Download size={11} />익스포트</Btn>
+            <Btn disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} />곡선 생성</Btn>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selectedId) return;
@@ -312,6 +338,73 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}
         </div>
       </div>
+
+      {/* 성장 곡선 생성 모달 */}
+      <Modal open={showCurve} onClose={() => setShowCurve(false)} title="성장 곡선 생성">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">레벨 컬럼</div>
+              <Input value={curve.level_column} onChange={(e) => setCurve({ ...curve, level_column: e.target.value })} />
+            </div>
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">값 컬럼 *</div>
+              <Input placeholder="예: exp" value={curve.value_column} onChange={(e) => setCurve({ ...curve, value_column: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-[#9a9aa3] mb-1">곡선 타입</div>
+            <Select value={curve.type} onChange={(e) => setCurve({ ...curve, type: e.target.value as CurveType })}>
+              <option value="linear">linear — base + factor×(L-1)</option>
+              <option value="power">power — base × L^factor</option>
+              <option value="exponential">exponential — base × factor^(L-1)</option>
+            </Select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">base</div>
+              <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
+            </div>
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">factor</div>
+              <Input value={curve.factor} onChange={(e) => setCurve({ ...curve, factor: e.target.value })} />
+            </div>
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
+              <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
+            </div>
+          </div>
+
+          {/* 미리보기 */}
+          {curvePreview.length > 0 && (
+            <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">미리보기</div>
+                <div className="text-[10px] text-[#6b6b77]">Lv1 {curvePreview[0].toLocaleString()} → Lv{curvePreview.length} {curvePreview[curvePreview.length - 1].toLocaleString()}</div>
+              </div>
+              <div className="flex items-end gap-px h-16">
+                {(() => {
+                  const max = Math.max(...curvePreview, 1);
+                  const step = Math.max(1, Math.ceil(curvePreview.length / 40));
+                  return curvePreview.filter((_, i) => i % step === 0).map((v, i) => (
+                    <div key={i} className="flex-1 bg-[#7c3aed] rounded-t-sm min-w-0" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} title={v.toLocaleString()} />
+                  ));
+                })()}
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-[11px] text-[#9a9aa3] cursor-pointer">
+            <input type="checkbox" checked={curve.replace} onChange={(e) => setCurve({ ...curve, replace: e.target.checked })} className="accent-[#7c3aed]" />
+            기존 행을 모두 지우고 새로 생성 (체크 해제 시 추가)
+          </label>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Btn onClick={() => setShowCurve(false)}>취소</Btn>
+            <Btn variant="primary" onClick={runCurve} disabled={!curve.value_column.trim() || curvePreview.length === 0}><TrendingUp size={11} />생성</Btn>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

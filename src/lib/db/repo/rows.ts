@@ -57,3 +57,7 @@ export function upsertRow(tableId: string, id: string | undefined, data: Record<
 export function deleteRow(id: string): void {
   getDb().prepare("DELETE FROM rows WHERE id = ?").run(id);
 }
+
+export function clearRows(tableId: string): void {
+  getDb().prepare("DELETE FROM rows WHERE table_id = ?").run(tableId);
+}
