@@ -1,13 +1,14 @@
 "use client";
-import { Home, Table2, Database, BarChart2, Play, Settings } from "lucide-react";
+import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText } from "lucide-react";
 import { type Screen } from "@/app/page";
 
 const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
-  { id: "home",       Icon: Home,      label: "프로젝트" },
-  { id: "schema",     Icon: Table2,    label: "스키마" },
-  { id: "editor",     Icon: Database,  label: "데이터" },
-  { id: "balance",    Icon: BarChart2, label: "밸런싱" },
-  { id: "simulation", Icon: Play,      label: "시뮬레이션" },
+  { id: "home",       Icon: Home,         label: "프로젝트" },
+  { id: "schema",     Icon: Table2,       label: "스키마" },
+  { id: "editor",     Icon: Database,     label: "데이터" },
+  { id: "balance",    Icon: BarChart2,    label: "밸런싱" },
+  { id: "simulation", Icon: Play,         label: "시뮬레이션" },
+  { id: "memory",     Icon: NotebookText, label: "메모리" },
 ];
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
