@@ -35,7 +35,7 @@ export default function App() {
           {screen === "home" && <ProjectHome onNavigate={navigate} />}
           {screen === "schema" && projectId && <SchemaEditor projectId={projectId} />}
           {screen === "editor" && projectId && <DataEditor projectId={projectId} />}
-          {screen === "balance" && projectId && <BalancePanel projectId={projectId} />}
+          {screen === "balance" && projectId && <BalancePanel projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "simulation" && projectId && <SimulationView projectId={projectId} />}
           {screen !== "home" && !projectId && (
             <div className="flex-1 flex items-center justify-center text-[#aaa] text-sm">

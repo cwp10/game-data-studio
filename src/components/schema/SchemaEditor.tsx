@@ -15,10 +15,15 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [showColModal, setShowColModal] = useState(false);
   const [tableForm, setTableForm] = useState({ name: "", description: "" });
   const [colForm, setColForm] = useState({ name: "", type: "string" as Column["type"], description: "" });
+  const [showRelModal, setShowRelModal] = useState(false);
+  const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
+  const [toColumns, setToColumns] = useState<Column[]>([]);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
   const loadRelations = () => fetch(`/api/relations?project_id=${projectId}`).then((r) => r.json()).then(setRelations);
+  const loadToColumns = (tid: string) =>
+    fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setToColumns(d.columns));
 
   useEffect(() => { loadTables(); loadRelations(); }, [projectId]);
   useEffect(() => { if (selectedId) loadColumns(selectedId); }, [selectedId]);
@@ -51,6 +56,19 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
     if (selectedId) loadColumns(selectedId);
   };
 
+  const createRelation = async () => {
+    if (!selectedId || !relForm.from_column || !relForm.to_table_id || !relForm.to_column) return;
+    await fetch("/api/relations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, from_table_id: selectedId, from_column: relForm.from_column, to_table_id: relForm.to_table_id, to_column: relForm.to_column }),
+    });
+    setShowRelModal(false);
+    setRelForm({ from_column: "", to_table_id: "", to_column: "" });
+    setToColumns([]);
+    loadRelations();
+  };
+
   const selectedTable = tables.find((t) => t.id === selectedId);
   const tableRelations = relations.filter((r) => r.from_table_id === selectedId || r.to_table_id === selectedId);
 
@@ -75,7 +93,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
       {/* 메인: 컬럼 목록 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedTable?.name ?? "테이블 선택"}>
-          <Btn onClick={() => {}}>관계 설정</Btn>
+          <Btn onClick={() => setShowRelModal(true)}>관계 설정</Btn>
           <Btn variant="primary" onClick={() => setShowColModal(true)}>＋ 컬럼 추가</Btn>
         </ContentHeader>
 
@@ -164,6 +182,36 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           <div className="flex justify-end gap-2 pt-2">
             <Btn onClick={() => setShowColModal(false)}>취소</Btn>
             <Btn variant="primary" onClick={addCol}>추가</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={showRelModal} onClose={() => setShowRelModal(false)} title="관계 설정">
+        <div className="space-y-3">
+          <div>
+            <div className="text-[11px] text-[#888] mb-1">이 테이블의 컬럼 *</div>
+            <Select value={relForm.from_column} onChange={(e) => setRelForm({ ...relForm, from_column: e.target.value })}>
+              <option value="">선택</option>
+              {columns.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </Select>
+          </div>
+          <div>
+            <div className="text-[11px] text-[#888] mb-1">참조 테이블 *</div>
+            <Select value={relForm.to_table_id} onChange={(e) => { setRelForm({ ...relForm, to_table_id: e.target.value, to_column: "" }); if (e.target.value) loadToColumns(e.target.value); }}>
+              <option value="">선택</option>
+              {tables.filter((t) => t.id !== selectedId).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </Select>
+          </div>
+          <div>
+            <div className="text-[11px] text-[#888] mb-1">참조 컬럼 *</div>
+            <Select value={relForm.to_column} onChange={(e) => setRelForm({ ...relForm, to_column: e.target.value })}>
+              <option value="">선택</option>
+              {toColumns.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Btn onClick={() => setShowRelModal(false)}>취소</Btn>
+            <Btn variant="primary" onClick={createRelation}>설정</Btn>
           </div>
         </div>
       </Modal>

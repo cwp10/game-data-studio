@@ -88,8 +88,25 @@ export function DataEditor({ projectId }: { projectId: string }) {
           {/* 툴바 */}
           <div className="h-10 border-b border-[#e8e6e0] flex items-center px-3 gap-1.5 flex-shrink-0">
             <Btn variant="primary" onClick={addRow}>＋ 행 추가</Btn>
-            <Btn>↑ CSV 임포트</Btn>
-            <Btn>↓ CSV 익스포트</Btn>
+            <Btn onClick={() => fileRef.current?.click()}>↑ CSV 임포트</Btn>
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || !selectedId) return;
+              const text = await file.text();
+              await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import", table_id: selectedId, csv_content: text }) });
+              e.target.value = "";
+              loadData(selectedId);
+              runBalance();
+            }} />
+            <Btn onClick={async () => {
+              if (!selectedId) return;
+              const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
+              const blob = await res.blob();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
+              a.click();
+            }}>↓ CSV 익스포트</Btn>
             <div className="w-px h-4.5 bg-[#e0ded8] mx-1" />
             <Btn onClick={runBalance}>✦ AI 분석</Btn>
             <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#e0ded8] rounded-md text-[11px] text-[#aaa] w-32">

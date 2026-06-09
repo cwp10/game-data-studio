@@ -9,6 +9,7 @@ interface Project {
   genre: string | null;
   description: string | null;
   table_count: number;
+  row_count: number;
   updated_at: number;
 }
 
@@ -60,6 +61,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
             {p.description && <div className="text-[11px] text-[#888] mb-2">{p.description}</div>}
             <div className="flex gap-3">
               <div className="text-[11px] text-[#666]">테이블 <span className="text-[#1a1a18] font-medium">{p.table_count}</span></div>
+              <div className="text-[11px] text-[#666]">행 <span className="text-[#1a1a18] font-medium">{p.row_count.toLocaleString()}</span></div>
             </div>
             <div className="flex justify-between items-center mt-2.5 pt-2.5 border-t border-[#f0ede8]">
               <span className="text-[10px] text-[#aaa]">{fmt(p.updated_at)}</span>

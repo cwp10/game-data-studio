@@ -22,6 +22,20 @@ export function SimulationView({ projectId }: { projectId: string }) {
     fetch(`/api/simulation?project_id=${projectId}`).then((r) => r.json()).then(setSimulations);
   }, [projectId]);
 
+  useEffect(() => {
+    if (selectedSimId) {
+      const sim = simulations.find((s) => s.id === selectedSimId);
+      if (sim?.formula_cs) setFormula(sim.formula_cs);
+      else setFormula("");
+      setSnapshot(null);
+    } else {
+      setFormula("");
+      setSnapshot(null);
+      setSelectedTables([]);
+      setSelectedCols([]);
+    }
+  }, [selectedSimId, simulations]);
+
   const loadTableCols = async (tid: string) => {
     if (tableColumns[tid]) return;
     const d = await fetch(`/api/tables/${tid}`).then((r) => r.json());
@@ -95,7 +109,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
       {/* 메인 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedSim?.name ?? "새 시뮬레이션"}>
-          <Btn onClick={() => {}}>↺ 재실행</Btn>
+          <Btn onClick={() => setSelectedSimId(null)}>↺ 재실행</Btn>
           <Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}>⎘ C# 복사</Btn>
         </ContentHeader>
 

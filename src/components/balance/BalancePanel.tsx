@@ -6,13 +6,18 @@ interface Table { id: string; name: string; }
 interface Anomaly { row_id: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; min: number; max: number; anomalies: Anomaly[]; }
 
-export function BalancePanel({ projectId }: { projectId: string }) {
+export function BalancePanel({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: "editor") => void }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [results, setResults] = useState<BalanceResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [totalRows, setTotalRows] = useState(0);
 
   useEffect(() => {
-    fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then(setTables);
+    fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((ts: Table[]) => {
+      setTables(ts);
+      Promise.all(ts.map((t) => fetch(`/api/rows?table_id=${t.id}`).then((r) => r.json())))
+        .then((allRows) => setTotalRows(allRows.reduce((sum, rows) => sum + rows.length, 0)));
+    });
   }, [projectId]);
 
   const runAll = async () => {
@@ -29,17 +34,17 @@ export function BalancePanel({ projectId }: { projectId: string }) {
 
   const dangers = results.flatMap((r) => r.anomalies.filter((a) => a.severity === "danger").map((a) => ({ ...a, column: r.column, mean: r.mean })));
   const warns = results.flatMap((r) => r.anomalies.filter((a) => a.severity === "warn").map((a) => ({ ...a, column: r.column, mean: r.mean })));
-  const totalRows = results.reduce((a, r) => a + r.anomalies.length, 0);
-  const score = totalRows === 0 ? 100 : Math.max(0, Math.round(100 - totalRows * 5));
+  const anomalyCount = results.reduce((a, r) => a + r.anomalies.length, 0);
+  const score = anomalyCount === 0 ? 100 : Math.max(0, Math.round(100 - anomalyCount * 5));
 
   return (
     <div className="flex-1 overflow-auto p-4">
       <SectionLabel>전체 현황</SectionLabel>
       <div className="grid grid-cols-4 gap-2.5 mb-4">
         {[
+          { label: "전체 데이터", val: totalRows, cls: "" },
           { label: "이상값", val: dangers.length, cls: dangers.length > 0 ? "text-[#A32D2D]" : "" },
           { label: "경고", val: warns.length, cls: warns.length > 0 ? "text-[#854F0B]" : "" },
-          { label: "분석 컬럼", val: results.length, cls: "" },
           { label: "밸런스 점수", val: score, cls: score >= 80 ? "text-[#27500A]" : score >= 60 ? "text-[#854F0B]" : "text-[#A32D2D]" },
         ].map((m) => (
           <div key={m.label} className="bg-[#f8f7f4] rounded-lg p-3">
@@ -65,7 +70,7 @@ export function BalancePanel({ projectId }: { projectId: string }) {
               <div className="text-[11px] text-[#888]">평균({a.mean.toFixed(0)})의 {(a.value / a.mean).toFixed(1)}배</div>
             </div>
             <span className={`text-xs font-medium ${a.sev === "danger" ? "text-[#A32D2D]" : "text-[#854F0B]"}`}>{a.value}</span>
-            <Btn className="text-[11px] py-0.5 px-2">수정</Btn>
+            <Btn className="text-[11px] py-0.5 px-2" onClick={() => onNavigate?.("editor")}>수정</Btn>
           </div>
         ))}
         {dangers.length + warns.length === 0 && (

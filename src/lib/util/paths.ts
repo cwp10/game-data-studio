@@ -2,7 +2,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "../../../..");
+const ROOT = path.resolve(__dirname, "../../..");
 
 export const DATA_DIR = process.env.GDS_DATA_DIR
   ? path.resolve(process.env.GDS_DATA_DIR)
