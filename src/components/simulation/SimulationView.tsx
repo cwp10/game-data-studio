@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { RotateCcw, Copy, Sparkles, Save, Plus } from "lucide-react";
-import { Btn, ContentHeader, CsCodeBlock, PanelHeader, SectionLabel } from "@/components/ui";
+import { Btn, ContentHeader, CsCodeBlock, PanelHeader, SectionLabel, Tooltip } from "@/components/ui";
 
 interface Table { id: string; name: string; }
 interface Column { id: string; name: string; type: string; }
@@ -124,8 +124,8 @@ export function SimulationView({ projectId }: { projectId: string }) {
       {/* 메인 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedSim?.name ?? "새 시뮬레이션"}>
-          <Btn onClick={() => setSelectedSimId(null)}><RotateCcw size={11} />재실행</Btn>
-          <Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}><Copy size={11} />C# 복사</Btn>
+          <Tooltip label="재실행"><Btn onClick={() => setSelectedSimId(null)}><RotateCcw size={11} /></Btn></Tooltip>
+          <Tooltip label="C# 코드 복사"><Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}><Copy size={11} /></Btn></Tooltip>
         </ContentHeader>
 
         <div className="flex-1 overflow-auto p-5">
