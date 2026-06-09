@@ -40,8 +40,23 @@ export default function App() {
           {screen === "balance" && projectId && <BalancePanel projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "simulation" && projectId && <SimulationView projectId={projectId} />}
           {screen !== "home" && !projectId && (
-            <div className="flex-1 flex items-center justify-center text-[#4a4a55] text-sm">
-              프로젝트를 먼저 선택하세요
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-[#16161a] border border-[#2a2a2f] flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a4a55" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <div>
+                <div className="text-[13px] font-medium text-[#6b6b77] mb-1">프로젝트를 선택하세요</div>
+                <div className="text-[11px] text-[#3a3a42]">홈에서 프로젝트를 선택하면 이 화면이 열립니다</div>
+              </div>
+              <button
+                onClick={() => setScreen("home")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2a2a2f] text-[11px] text-[#6b6b77] hover:bg-[#1a1a1c] hover:text-[#9a9aa3] transition-colors"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                프로젝트 목록
+              </button>
             </div>
           )}
         </div>

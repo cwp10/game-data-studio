@@ -6,7 +6,7 @@ export function Btn({
   className = "",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "primary" | "success" }) {
-  const base = "inline-flex items-center gap-1 px-2.5 py-1 border rounded-md text-[11px] cursor-pointer whitespace-nowrap transition-colors";
+  const base = "inline-flex items-center gap-1.5 px-2.5 py-1.5 border rounded-md text-[11px] cursor-pointer whitespace-nowrap transition-colors";
   const variants = {
     default: "bg-[#1a1a1c] border-[#2a2a2f] text-[#9a9aa3] hover:bg-[#1e1e24] hover:border-[#3a3a42] hover:text-[#ededed]",
     primary: "bg-[#7c3aed] border-[#7c3aed] text-white hover:bg-[#6d28d9]",
