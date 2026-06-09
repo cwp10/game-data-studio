@@ -15,7 +15,7 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
 ];
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar:collapsed") === "1");
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && localStorage.getItem("sidebar:collapsed") === "1");
 
   return (
     <div className={`${collapsed ? "w-[52px]" : "w-[168px]"} bg-[#16161a] border-r border-[#2a2a2f] flex flex-col flex-shrink-0 transition-[width] duration-150`}>

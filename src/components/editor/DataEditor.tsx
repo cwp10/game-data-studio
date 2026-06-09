@@ -32,7 +32,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [snapshots, setSnapshots] = useState<{ id: string; name: string; created_at: number }[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
-  const [bottomCollapsed, setBottomCollapsed] = useState(() => localStorage.getItem("editor:bottomCollapsed") === "1");
+  const [bottomCollapsed, setBottomCollapsed] = useState(() => typeof window !== "undefined" && localStorage.getItem("editor:bottomCollapsed") === "1");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);

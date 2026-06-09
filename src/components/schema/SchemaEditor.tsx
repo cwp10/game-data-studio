@@ -23,7 +23,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
   const [bottomTab, setBottomTab] = useState<"chat" | "relations">("chat");
-  const [bottomCollapsed, setBottomCollapsed] = useState(() => localStorage.getItem("schema:bottomCollapsed") === "1");
+  const [bottomCollapsed, setBottomCollapsed] = useState(() => typeof window !== "undefined" && localStorage.getItem("schema:bottomCollapsed") === "1");
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
