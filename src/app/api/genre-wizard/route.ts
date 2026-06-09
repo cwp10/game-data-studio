@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
+import { resolveClaudeBin } from "@/lib/util/claude";
 
 // claude 헤드리스 호출이 필요하므로 Node 런타임 고정
 export const runtime = "nodejs";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 // claude -p --output-format json 으로 호출하고 assistant 최종 텍스트를 반환
 function runClaude(prompt: string, system: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const bin = process.env.CLAUDE_BIN ?? "claude";
+    const bin = resolveClaudeBin();
     // MCP/툴 없이 순수 텍스트 생성만 (strict-mcp-config 로 외부 MCP 서버 미로드)
     const child = spawn(bin, ["-p", "--output-format", "json", "--strict-mcp-config", "--append-system-prompt", system], {
       cwd: process.cwd(),

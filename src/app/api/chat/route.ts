@@ -5,6 +5,7 @@ import { listColumns } from "@/lib/db/repo/columns";
 import { getProject } from "@/lib/db/repo/projects";
 import { readProjectMemory } from "@/lib/memory/projectMemory";
 import { addMessage, listMessages, clearMessages } from "@/lib/db/repo/chat";
+import { resolveClaudeBin } from "@/lib/util/claude";
 
 // 프로젝트 대화 이력 로드
 export async function GET(req: NextRequest) {
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
   // 사용자 메시지 즉시 저장
   addMessage({ project_id, table_id, role: "user", content: message });
 
-  const bin = process.env.CLAUDE_BIN ?? "claude";
+  const bin = resolveClaudeBin();
   // 보안: bypassPermissions(전체 우회) 대신 정확한 allowlist만 사용한다.
   // 헤드리스(-p)에서 allowedTools 에 나열한 툴만 프롬프트 없이 실행되고 나머지는 거부된다.
   const args = [

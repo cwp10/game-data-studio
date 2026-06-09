@@ -38,11 +38,9 @@ function createWindow() {
     },
   });
 
-  const url = isDev
-    ? `http://localhost:${NEXT_PORT}`
-    : `file://${path.join(__dirname, "../out/index.html")}`;
-
-  mainWindow.loadURL(url);
+  // 개발/운영 모두 로컬 Next.js 서버를 로드한다.
+  // 이 앱은 API 라우트(SQLite·MCP·claude)가 필요해 정적 export 로는 동작하지 않는다.
+  mainWindow.loadURL(`http://localhost:${NEXT_PORT}`);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -50,15 +48,16 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  if (isDev) {
-    // Next.js dev server 실행
-    nextProcess = spawn("pnpm", ["dev"], {
-      cwd: path.join(__dirname, ".."),
-      shell: true,
-      stdio: "inherit",
-    });
-    await waitForNext(`http://localhost:${NEXT_PORT}`);
-  }
+  // dev: next dev / 운영: next start (둘 다 npm, 정적 export 아님)
+  const appRoot = path.join(__dirname, "..");
+  nextProcess = spawn("npm", ["run", isDev ? "dev" : "start"], {
+    cwd: appRoot,
+    shell: true,
+    stdio: "inherit",
+    // spawn된 서버가 claude 를 찾을 수 있도록 PATH 보강
+    env: { ...process.env, PATH: `${process.env.PATH || ""}:${path.join(require("os").homedir(), ".local/bin")}:/opt/homebrew/bin:/usr/local/bin` },
+  });
+  await waitForNext(`http://localhost:${NEXT_PORT}`);
   createWindow();
 });
 
