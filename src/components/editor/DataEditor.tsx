@@ -33,6 +33,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
@@ -228,6 +229,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   // 컬럼 가시성 (id 컬럼은 항상 표시)
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.name));
 
+  // CSV 내보내기
+  const csvExport = async () => {
+    if (!selectedId) return;
+    const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
+    a.click();
+  };
+
   // JSON 내보내기
   const exportJson = () => {
     if (!selectedId) return;
@@ -307,24 +319,23 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         {/* 데이터 그리드 */}
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* 툴바 */}
-          <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
+          <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1 flex-shrink-0">
             <Btn variant="primary" onClick={addRow}><Plus size={11} />행 추가</Btn>
-            <Btn disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} />삭제</Btn>
-            {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6]">{selectedRowIds.size}행 선택됨</span>}
-            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
-            <Btn onClick={() => fileRef.current?.click()}><Upload size={11} />임포트</Btn>
-            <Btn onClick={async () => {
-              if (!selectedId) return;
-              const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
-              const blob = await res.blob();
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
-              a.click();
-            }}><Download size={11} />익스포트</Btn>
-            <Btn disabled={!selectedId} onClick={exportJson}><Download size={11} />JSON</Btn>
-            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
-            <Btn disabled={!selectedId} onClick={saveSnapshot}><Save size={11} />스냅샷</Btn>
+            <Btn title="선택 삭제" disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn>
+            {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6] px-1">{selectedRowIds.size}행</span>}
+            <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
+            <Btn title="CSV 임포트" onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn>
+            <div className="relative">
+              <Btn title="내보내기" disabled={!selectedId} onClick={() => setShowExportMenu((v) => !v)}><Download size={11} /></Btn>
+              {showExportMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-[#1a1a1f] border border-[#2a2a2f] rounded-lg shadow-xl z-50 py-1 min-w-[80px]" onMouseLeave={() => setShowExportMenu(false)}>
+                  <button className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { csvExport(); setShowExportMenu(false); }}>CSV</button>
+                  <button className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { exportJson(); setShowExportMenu(false); }}>JSON</button>
+                </div>
+              )}
+            </div>
+            <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
+            <Btn title="스냅샷 저장" disabled={!selectedId} onClick={saveSnapshot}><Save size={11} /></Btn>
             {snapshots.length > 0 && (
               <select
                 className="bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#6b6b77] outline-none"
@@ -335,8 +346,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                 {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
-            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
-            <Btn disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} />곡선 생성</Btn>
+            <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
+            <Btn title="곡선 생성" disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn>
+            <Btn title="AI 밸런스 분석" onClick={runBalance}><Sparkles size={11} /></Btn>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selectedId) return;
@@ -346,8 +358,6 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               loadData(selectedId);
               runBalance();
             }} />
-            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
-            <Btn onClick={runBalance}><Sparkles size={11} />AI 분석</Btn>
             <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#2a2a2f] rounded-lg text-[11px] w-40 bg-[#16161a] focus-within:border-[#7c3aed]/50">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#3a3a42] flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input
