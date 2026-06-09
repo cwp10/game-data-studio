@@ -2,7 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createProject, deleteProject, listProjects } from "../db/repo/projects.js";
-import { addColumn, listColumns, removeColumn } from "../db/repo/columns.js";
+import { addColumn, listColumns, removeColumn, countColumnsUsingEnum } from "../db/repo/columns.js";
+import { listEnumTypes, createEnumType, updateEnumType, deleteEnumType } from "../db/repo/enumTypes.js";
 import { createTable, deleteTable, getTable, listTables } from "../db/repo/tables.js";
 import { deleteRow, readRows, upsertRow } from "../db/repo/rows.js";
 import { deleteRelation, listRelations, setRelation } from "../db/repo/relations.js";
@@ -74,11 +75,11 @@ server.tool(
 // ── Columns ───────────────────────────────────────────────
 server.tool(
   "add_column",
-  "컬럼 추가",
-  { table_id: z.string(), name: z.string(), type: z.enum(["string", "number", "boolean"]), description: z.string().optional() },
-  async ({ table_id, name, type, description }) => {
+  "컬럼 추가. type='enum'이면 enum_type_id(enum_types.id) 필수",
+  { table_id: z.string(), name: z.string(), type: z.enum(["string", "number", "boolean", "enum"]), description: z.string().optional(), enum_type_id: z.string().optional() },
+  async ({ table_id, name, type, description, enum_type_id }) => {
     const existing = listColumns(table_id);
-    return ok(addColumn({ table_id, name, type, description, order_index: existing.length }));
+    return ok(addColumn({ table_id, name, type, description, enum_type_id, order_index: existing.length }));
   }
 );
 
@@ -250,6 +251,40 @@ server.tool(
     formula_cs: z.string().optional(),
   },
   async (args) => ok(saveSimulation(args))
+);
+
+// ── Enum Types (재사용 커스텀 타입) ───────────────────────
+server.tool(
+  "list_enum_types",
+  "프로젝트의 재사용 enum 타입 목록 (예: Grade=[SSR,SR,R,N])",
+  { project_id: z.string() },
+  async ({ project_id }) => ok(listEnumTypes(project_id))
+);
+
+server.tool(
+  "create_enum_type",
+  "재사용 enum 타입 생성. 이후 add_column(type='enum', enum_type_id=...)로 컬럼에 연결",
+  { project_id: z.string(), name: z.string(), values: z.array(z.string()) },
+  async ({ project_id, name, values }) => ok(createEnumType({ project_id, name, values }))
+);
+
+server.tool(
+  "update_enum_type",
+  "enum 타입의 이름 또는 허용값 갱신 (참조 중인 모든 컬럼에 반영)",
+  { id: z.string(), name: z.string().optional(), values: z.array(z.string()).optional() },
+  async ({ id, name, values }) => ok(updateEnumType(id, { name, values }))
+);
+
+server.tool(
+  "delete_enum_type",
+  "enum 타입 삭제. 사용 중인 컬럼이 있으면 거부됨",
+  { id: z.string() },
+  async ({ id }) => {
+    const used = countColumnsUsingEnum(id);
+    if (used > 0) throw new Error(`이 타입을 사용하는 컬럼이 ${used}개 있어 삭제할 수 없습니다.`);
+    deleteEnumType(id);
+    return ok({ deleted: true });
+  }
 );
 
 // ── Project Memory ────────────────────────────────────────

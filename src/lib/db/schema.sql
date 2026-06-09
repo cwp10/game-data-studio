@@ -24,10 +24,20 @@ CREATE TABLE IF NOT EXISTS columns (
   id           TEXT PRIMARY KEY,
   table_id     TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
-  type         TEXT NOT NULL CHECK(type IN ('string','number','boolean')),
+  type         TEXT NOT NULL,            -- 'string'|'number'|'boolean'|'enum' (앱에서 검증)
   order_index  INTEGER NOT NULL DEFAULT 0,
   description  TEXT,
+  enum_type_id TEXT,                     -- type='enum' 일 때 enum_types.id 참조
   created_at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS enum_types (
+  id             TEXT PRIMARY KEY,
+  project_id     TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  allowed_values TEXT NOT NULL,          -- JSON 배열
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS rows (
@@ -77,3 +87,4 @@ CREATE INDEX IF NOT EXISTS idx_rows_table        ON rows(table_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_relations_project ON relations(project_id);
 CREATE INDEX IF NOT EXISTS idx_simulations_project ON simulations(project_id);
 CREATE INDEX IF NOT EXISTS idx_chat_project      ON chat_messages(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_enum_types_project ON enum_types(project_id);
