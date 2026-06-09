@@ -30,7 +30,17 @@ export function EconomySim({ projectId }: { projectId: string }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(key);
-      if (raw) { const s = JSON.parse(raw); setSources(s.sources); setSinks(s.sinks); setDays(s.days); setStart(s.start); }
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      // 형태 검증: 배열이 아니면 무시 (구버전/손상 데이터 → 크래시 방지)
+      if (!Array.isArray(s?.sources) || !Array.isArray(s?.sinks)) return;
+      setSources(s.sources);
+      setSinks(s.sinks);
+      if (typeof s.days === "string") setDays(s.days);
+      if (typeof s.start === "string") setStart(s.start);
+      // 복원된 엔트리 id 와 충돌하지 않도록 idRef 를 최대값 이상으로 동기화
+      const maxId = Math.max(100, ...[...s.sources, ...s.sinks].map((e: { id?: number }) => Number(e?.id) || 0));
+      idRef.current = maxId;
     } catch { /* ignore */ }
     // eslint-disable-next-line
   }, [projectId]);

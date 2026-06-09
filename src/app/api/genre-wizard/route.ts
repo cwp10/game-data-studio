@@ -22,6 +22,7 @@ function runClaude(prompt: string, system: string): Promise<string> {
     child.stdout.on("data", (c: Buffer) => (out += c.toString()));
     child.stderr.on("data", (c: Buffer) => (err += c.toString()));
     child.on("error", reject);
+    child.stdin.on("error", () => { /* EPIPE 등 — close 에서 처리 */ });
     child.on("close", () => {
       try {
         const o = JSON.parse(out);

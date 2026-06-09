@@ -26,11 +26,16 @@ export function createTable(data: { project_id: string; name: string; descriptio
   const db = getDb();
   const id = newId();
   const now = Date.now();
-  db.prepare(
-    "INSERT INTO tables (id, project_id, name, description, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, data.project_id, data.name, data.description ?? null, data.order_index ?? 0, now, now);
-  // 모든 테이블은 고유 id 컬럼(PK)을 기본으로 가진다. 행 생성 시 유니크 값이 자동 부여됨.
-  addColumn({ table_id: id, name: "id", type: "string", description: "고유 식별자", order_index: 0 });
+  // 테이블 행 + 기본 id 컬럼을 한 트랜잭션으로 — addColumn 이 실패하면 테이블도 롤백되어
+  // "컬럼 없는 테이블"이 남지 않는다.
+  const tx = db.transaction(() => {
+    db.prepare(
+      "INSERT INTO tables (id, project_id, name, description, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, data.project_id, data.name, data.description ?? null, data.order_index ?? 0, now, now);
+    // 모든 테이블은 고유 id 컬럼(PK)을 기본으로 가진다. 행 생성 시 유니크 값이 자동 부여됨.
+    addColumn({ table_id: id, name: "id", type: "string", description: "고유 식별자", order_index: 0 });
+  });
+  tx();
   return getTable(id)!;
 }
 

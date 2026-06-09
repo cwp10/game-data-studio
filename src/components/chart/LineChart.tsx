@@ -40,8 +40,8 @@ export function LineChart({ series, xLabels, height = 220 }: { series: Series[];
             </g>
           );
         })}
-        {/* X 라벨 (처음/중간/끝) */}
-        {xLabels && [0, Math.floor((n - 1) / 2), n - 1].map((i) => (
+        {/* X 라벨 (처음/중간/끝) — n=2 등에서 인덱스 중복 제거 */}
+        {xLabels && [...new Set([0, Math.floor((n - 1) / 2), n - 1])].map((i) => (
           <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize={9} fill="#4a4a55">{xLabels[i]}</text>
         ))}
         {/* 시리즈 라인 */}

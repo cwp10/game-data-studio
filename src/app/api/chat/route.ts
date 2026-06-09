@@ -109,9 +109,12 @@ export async function POST(req: NextRequest) {
       const send = (s: string) => { if (!closed) controller.enqueue(enc.encode(s)); };
       const close = () => { if (!closed) { closed = true; controller.close(); } };
 
-      const child = spawn(bin, args, { cwd: process.cwd(), env: process.env });
+      // detached: 자식(claude)이 spawn한 MCP 서버까지 프로세스 그룹째 종료할 수 있게 한다.
+      const child = spawn(bin, args, { cwd: process.cwd(), env: process.env, detached: true });
 
-      // 프롬프트는 stdin 으로 전달 (인자 이스케이프 회피)
+      // 프롬프트는 stdin 으로 전달 (인자 이스케이프 회피).
+      // claude 가 즉시 죽으면 stdin write 에서 EPIPE 가 날 수 있으므로 핸들러로 흡수.
+      child.stdin.on("error", () => { /* EPIPE 등 — child error/close 에서 처리됨 */ });
       child.stdin.write(message);
       child.stdin.end();
 
@@ -164,7 +167,11 @@ export async function POST(req: NextRequest) {
       });
 
       // 클라이언트가 끊으면 자식도 종료
-      req.signal.addEventListener("abort", () => { child.kill("SIGTERM"); close(); });
+      req.signal.addEventListener("abort", () => {
+        // 프로세스 그룹째 종료 (claude + 그 자식 MCP 서버). 실패 시 단일 종료로 폴백.
+        try { if (child.pid) process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
+        close();
+      });
     },
   });
 

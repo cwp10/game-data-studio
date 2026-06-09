@@ -48,11 +48,15 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
   const loadHistory = () =>
-    fetch(`/api/chat?project_id=${projectId}`).then((r) => r.json()).then(setMessages).catch(() => {});
+    fetch(`/api/chat?project_id=${projectId}`).then((r) => r.json()).then((m) => { if (mountedRef.current) setMessages(m); }).catch(() => {});
 
   useEffect(() => { loadHistory(); /* eslint-disable-next-line */ }, [projectId]);
+
+  // 언마운트 시 진행 중인 스트림을 중단해 claude/MCP 프로세스 누수와 unmounted setState 를 막는다.
+  useEffect(() => () => { mountedRef.current = false; abortRef.current?.abort(); }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -122,11 +126,13 @@ export function ChatPanel({
       }
     } finally {
       abortRef.current = null;
-      setStreaming(false);
-      setLiveText("");
-      setLiveTools([]);
-      await loadHistory();      // 영속된 정식 transcript 로 교체
-      onDataChanged?.();        // 스키마/데이터 변경 반영
+      if (mountedRef.current) {
+        setStreaming(false);
+        setLiveText("");
+        setLiveTools([]);
+        await loadHistory();      // 영속된 정식 transcript 로 교체
+        onDataChanged?.();        // 스키마/데이터 변경 반영
+      }
     }
   };
 

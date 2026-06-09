@@ -42,5 +42,14 @@ export function updateProject(id: string, data: Partial<Pick<Project, "name" | "
 }
 
 export function deleteProject(id: string): void {
-  getDb().prepare("DELETE FROM projects WHERE id = ?").run(id);
+  const db = getDb();
+  // enum_types / chat_messages 는 lazy-bootstrap 테이블이라 FK CASCADE 가 없을 수 있다.
+  // (기존 DB 호환) 명시적으로 정리해 고아 행이 남지 않도록 한다.
+  const tx = db.transaction(() => {
+    for (const t of ["enum_types", "chat_messages"]) {
+      try { db.prepare(`DELETE FROM ${t} WHERE project_id = ?`).run(id); } catch { /* 테이블 미존재 시 무시 */ }
+    }
+    db.prepare("DELETE FROM projects WHERE id = ?").run(id); // tables/columns/rows/relations 는 실제 FK CASCADE
+  });
+  tx();
 }

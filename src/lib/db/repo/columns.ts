@@ -88,6 +88,11 @@ export function updateColumn(
   if (!cur) throw new Error("컬럼을 찾을 수 없습니다.");
 
   const newName = patch.name?.trim() || cur.name;
+  const newTypeForGuard = patch.type ?? cur.type;
+  // id 컬럼은 PK·행 자동 id 의 기준이므로 이름/타입 변경을 막는다(설명만 수정 가능).
+  if (cur.name === "id" && (newName !== "id" || newTypeForGuard !== cur.type)) {
+    throw new Error("'id' 컬럼의 이름·타입은 변경할 수 없습니다.");
+  }
   if (newName !== cur.name) {
     const dup = db.prepare("SELECT id FROM columns WHERE table_id = ? AND name = ? AND id != ?").get(cur.table_id, newName, id);
     if (dup) throw new Error(`이미 '${newName}' 컬럼이 존재합니다.`);
@@ -129,5 +134,8 @@ export function reorderColumns(tableId: string, orderedIds: string[]): void {
 }
 
 export function removeColumn(id: string): void {
-  getDb().prepare("DELETE FROM columns WHERE id = ?").run(id);
+  const db = getDb();
+  const col = db.prepare("SELECT name FROM columns WHERE id = ?").get(id) as { name: string } | undefined;
+  if (col?.name === "id") throw new Error("'id' 컬럼은 삭제할 수 없습니다.");
+  db.prepare("DELETE FROM columns WHERE id = ?").run(id);
 }

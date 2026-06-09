@@ -48,14 +48,20 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   // 차트 기본 축: 테이블이 바뀔 때 1회 초기화 (level 우선). 같은 테이블 내 편집 시엔 사용자 선택 보존.
   const chartTableRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedId || columns.length === 0 || chartTableRef.current === selectedId) return;
+    if (!selectedId || columns.length === 0) return;
     if (columns[0].table_id && columns[0].table_id !== selectedId) return; // 아직 이전 테이블 컬럼
+    const names = new Set(columns.map((c) => c.name));
+    const firstInit = chartTableRef.current !== selectedId;
+    // 테이블 전환 시 1회 초기화. 그 외엔, 선택된 축 컬럼이 삭제/이름변경으로 사라졌을 때만 정리.
+    if (!firstInit && names.has(chartX) && chartY.every((y) => names.has(y))) return;
     chartTableRef.current = selectedId;
     const nums = columns.filter((c) => c.type === "number").map((c) => c.name);
-    const x = columns.find((c) => c.name === "level")?.name ?? columns.find((c) => c.name === "id")?.name ?? columns[0]?.name ?? "";
+    const x = (!firstInit && names.has(chartX)) ? chartX
+      : columns.find((c) => c.name === "level")?.name ?? columns.find((c) => c.name === "id")?.name ?? columns[0]?.name ?? "";
+    const keepY = chartY.filter((y) => names.has(y));
     setChartX(x);
-    setChartY(nums.filter((c) => c !== x).slice(0, 2));
-  }, [selectedId, columns]);
+    setChartY(firstInit || keepY.length === 0 ? nums.filter((c) => c !== x).slice(0, 2) : keepY);
+  }, [selectedId, columns, chartX, chartY]);
 
   const addRow = async () => {
     if (!selectedId) return;

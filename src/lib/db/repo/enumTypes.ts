@@ -26,7 +26,7 @@ function ensure() {
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS enum_types (
       id             TEXT PRIMARY KEY,
-      project_id     TEXT NOT NULL,
+      project_id     TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       name           TEXT NOT NULL,
       allowed_values TEXT NOT NULL,
       created_at     INTEGER NOT NULL,

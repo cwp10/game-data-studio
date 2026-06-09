@@ -67,16 +67,55 @@ describe("기본 id 컬럼 + 행 유니크 id", () => {
     expect(names).toContain("id");
   });
 
-  it("upsertRow 는 빈 id 를 유니크 값(행 id)으로 채우고, 명시 id 는 보존한다", async () => {
+  it("upsertRow 는 빈 id 를 유니크 값(행 id)으로 채우고, 명시 id 는 보존하며 입력 객체를 변형하지 않는다", async () => {
     const { createTable } = await import("./tables");
     const { upsertRow } = await import("./rows");
     const t = createTable({ project_id: "p1", name: "stages" });
 
-    const auto = upsertRow(t.id, undefined, { id: "" });
+    const input: Record<string, unknown> = { id: "" };
+    const auto = upsertRow(t.id, undefined, input);
     expect(auto.data.id).toBe(auto.id);
     expect(String(auto.data.id).length).toBeGreaterThan(0);
+    expect(input.id).toBe(""); // 호출자 객체는 그대로 (비변형)
 
     const explicit = upsertRow(t.id, undefined, { id: "stage_001" });
     expect(explicit.data.id).toBe("stage_001");
+  });
+
+  it("id 컬럼은 이름·타입 변경과 삭제가 거부된다", async () => {
+    const { createTable, getTable } = await import("./tables");
+    const { listColumns, updateColumn, removeColumn } = await import("./columns");
+    const t = createTable({ project_id: "p1", name: "guarded" });
+    void getTable;
+    const idCol = listColumns(t.id).find((c) => c.name === "id")!;
+    expect(() => updateColumn(idCol.id, { name: "code" })).toThrow();
+    expect(() => updateColumn(idCol.id, { type: "number" })).toThrow();
+    expect(() => removeColumn(idCol.id)).toThrow();
+    // 설명 변경은 허용
+    expect(() => updateColumn(idCol.id, { description: "PK" })).not.toThrow();
+  });
+
+  it("generateCurveIntoTable 은 level 컬럼과 value 컬럼이 같으면 거부한다", async () => {
+    const { createTable } = await import("./tables");
+    const { generateCurveIntoTable } = await import("../../curve/apply");
+    const t = createTable({ project_id: "p1", name: "curve_guard" });
+    expect(() => generateCurveIntoTable({ table_id: t.id, level_column: "x", value_column: "x", type: "linear", base: 1, factor: 1, count: 3 })).toThrow();
+  });
+});
+
+describe("deleteProject 는 lazy-bootstrap 테이블(enum/chat)까지 정리한다", () => {
+  it("프로젝트 삭제 시 enum_types/chat_messages 고아 행이 남지 않는다", async () => {
+    const { createProject, deleteProject } = await import("./projects");
+    const { createEnumType, listEnumTypes } = await import("./enumTypes");
+    const { addMessage, listMessages } = await import("./chat");
+    const p = createProject({ name: "ToDelete" });
+    createEnumType({ project_id: p.id, name: "Grade", values: ["A", "B"] });
+    addMessage({ project_id: p.id, role: "user", content: "hi" });
+    expect(listEnumTypes(p.id).length).toBe(1);
+    expect(listMessages(p.id).length).toBe(1);
+
+    deleteProject(p.id);
+    expect(listEnumTypes(p.id).length).toBe(0);
+    expect(listMessages(p.id).length).toBe(0);
   });
 });

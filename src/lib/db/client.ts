@@ -15,5 +15,8 @@ export function getDb(): Database.Database {
   _db = new Database(DB_PATH);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
+  // 두 프로세스(Next.js + MCP 서버)가 같은 DB를 쓰므로, 쓰기 잠금 충돌 시
+  // 즉시 SQLITE_BUSY 로 실패하지 않고 대기하도록 한다.
+  _db.pragma("busy_timeout = 5000");
   return _db;
 }

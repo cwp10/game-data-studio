@@ -115,7 +115,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           {tables.map((t) => (
             <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)}>
               <span className="flex-1 truncate">{t.name}</span>
-              <span className="ml-auto text-[10px] text-[#3a3a42]">{columns.length || ""}</span>
+              <span className="ml-auto text-[10px] text-[#3a3a42]">{selectedId === t.id ? columns.length || "" : ""}</span>
             </PanelItem>
           ))}
         </div>

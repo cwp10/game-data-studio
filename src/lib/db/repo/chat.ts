@@ -18,7 +18,7 @@ function ensure() {
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id         TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       table_id   TEXT,
       role       TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
       content    TEXT NOT NULL,
