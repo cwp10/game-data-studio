@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2 } from "lucide-react";
-import { Btn, GradeBadge, PanelHeader, PanelItem } from "@/components/ui";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3 } from "lucide-react";
+import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab } from "@/components/ui";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { type Screen } from "@/app/page";
 
 interface Table { id: string; name: string; }
@@ -20,6 +21,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [editVal, setEditVal] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [bottomTab, setBottomTab] = useState<"chat" | "balance">("chat");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
@@ -209,9 +211,27 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         </div>
       </div>
 
-      {/* 하단 AI 패널 */}
-      <div className="h-[148px] border-t border-[#2a2a2f] flex flex-shrink-0 bg-[#16161a]">
-        <div className="flex-1 px-4 py-3 border-r border-[#2a2a2f]">
+      {/* 하단 탭 패널: 대화 | 밸런싱 분석 */}
+      <div className="h-[300px] border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]">
+        <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
+          <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
+          <BottomTab active={bottomTab === "balance"} onClick={() => setBottomTab("balance")}><BarChart3 size={12} />밸런싱 분석</BottomTab>
+        </div>
+
+        {bottomTab === "chat" ? (
+          <div className="flex-1 overflow-hidden">
+            <ChatPanel
+              projectId={projectId}
+              tableId={selectedId}
+              tableName={tables.find((t) => t.id === selectedId)?.name}
+              placeholder={`${tables.find((t) => t.id === selectedId)?.name ?? "데이터"}에 할 일을 말해보세요 (Cmd+Enter)`}
+              examples={["SSR 캐릭터 3개 추가해줘", "전체 def를 10% 올려줘", "이상값을 권장값으로 보정해줘"]}
+              onDataChanged={() => { if (selectedId) { loadData(selectedId); runBalance(); } }}
+            />
+          </div>
+        ) : (
+        <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 px-4 py-3 border-r border-[#2a2a2f] overflow-auto">
           <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2 flex items-center gap-1.5">
             <Sparkles size={11} className="text-[#8b5cf6]" />
             AI 밸런싱 제안{topAnomaly && <span className="text-[#9a9aa3] normal-case tracking-normal font-medium">— {topAnomaly.label} {topAnomaly.column}</span>}
@@ -257,6 +277,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             </div>
           ) : <div className="text-[11px] text-[#3a3a42]">데이터 없음</div>}
         </div>
+        </div>
+        )}
       </div>
 
       {/* 상태바 */}

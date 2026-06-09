@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import { getTable } from "@/lib/db/repo/tables";
+import { listColumns } from "@/lib/db/repo/columns";
 import { addMessage, listMessages, clearMessages } from "@/lib/db/repo/chat";
 
 // 프로젝트 대화 이력 로드
@@ -40,11 +41,19 @@ function buildSystemPrompt(projectId: string, tableId?: string, tableName?: stri
     "당신은 Game Data Studio의 게임 데이터 기획 어시스턴트입니다.",
     `현재 작업 중인 프로젝트 id는 "${projectId}" 입니다.`,
   ];
-  if (tableId) lines.push(`현재 보고 있는 테이블은 id "${tableId}"${tableName ? ` (이름: ${tableName})` : ""} 입니다.`);
+  if (tableId) {
+    lines.push(`현재 보고 있는 테이블은 id "${tableId}"${tableName ? ` (이름: ${tableName})` : ""} 입니다.`);
+    // 현재 테이블의 컬럼 스키마를 주입 (값 없는 컬럼은 행 data에 키가 없어 추정이 불가하므로)
+    const cols = listColumns(tableId);
+    if (cols.length) {
+      lines.push(`이 테이블의 컬럼 정의: ${cols.map((c) => `${c.name}(${c.type})`).join(", ")}`);
+      lines.push("위 컬럼 정의가 현재 스키마의 정답입니다. 이미 존재하는 컬럼을 add_column 으로 다시 추가하지 마세요(중복 생성됨).");
+    }
+  }
   lines.push(
     "사용자의 자연어 요청을 등록된 MCP 툴(create_table, add_column, upsert_row, read_rows, analyze_balance 등)로 처리하세요.",
     "- 항상 위 project_id / table_id 스코프 안에서만 동작합니다.",
-    "- 행을 추가·수정하기 전에 list_tables / read_rows 로 현재 컬럼·데이터를 먼저 확인해 일관되게 작성하세요.",
+    "- 컬럼 존재 여부는 위 '컬럼 정의'를 기준으로 판단하세요(행 데이터에 키가 없어도 컬럼은 존재할 수 있습니다).",
     "- 프로젝트·테이블 삭제는 절대 하지 마세요.",
     "- 작업을 마치면 무엇을 했는지 한국어로 한두 문장으로 요약하세요.",
   );

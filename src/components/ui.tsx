@@ -61,6 +61,19 @@ export function PanelItem({ active, children, onClick, className = "" }: { activ
   );
 }
 
+export function BottomTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium border-b-2 transition-colors ${
+        active ? "border-[#7c3aed] text-[#ededed]" : "border-transparent text-[#6b6b77] hover:text-[#9a9aa3]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function ContentHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between flex-shrink-0">

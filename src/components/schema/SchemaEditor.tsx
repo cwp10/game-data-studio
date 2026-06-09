@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus, Link2, FileText, Lock } from "lucide-react";
-import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge } from "@/components/ui";
+import { Plus, Link2, FileText, Lock, MessageSquare } from "lucide-react";
+import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge, BottomTab } from "@/components/ui";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 
 interface Table { id: string; name: string; description: string | null; }
 interface Column { id: string; name: string; type: "string" | "number" | "boolean"; description: string | null; }
@@ -19,6 +20,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [showRelModal, setShowRelModal] = useState(false);
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
+  const [bottomTab, setBottomTab] = useState<"chat" | "relations">("chat");
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
@@ -156,19 +158,40 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           </table>
         </div>
 
-        {/* 관계 패널 */}
-        {tableRelations.length > 0 && (
-          <div className="px-3.5 py-2.5 bg-[#16161a] border-t border-[#2a2a2f] flex-shrink-0">
-            <div className="text-[11px] font-medium text-[#6b6b77] mb-1.5">관계</div>
-            {tableRelations.map((r) => (
-              <div key={r.id} className="flex items-center gap-2 text-[11px] text-[#9a9aa3] py-0.5">
-                <span className="font-medium">{tables.find((t) => t.id === r.from_table_id)?.name}.{r.from_column}</span>
-                <span className="text-[#3a3a42]">→</span>
-                <span>{tables.find((t) => t.id === r.to_table_id)?.name}.{r.to_column}</span>
-              </div>
-            ))}
+        {/* 하단 탭 패널: 대화 | 관계 */}
+        <div className="h-[280px] border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]">
+          <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
+            <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
+            <BottomTab active={bottomTab === "relations"} onClick={() => setBottomTab("relations")}>
+              <Link2 size={12} />관계{tableRelations.length > 0 && <span className="ml-0.5 text-[#4a4a55]">{tableRelations.length}</span>}
+            </BottomTab>
           </div>
-        )}
+
+          {bottomTab === "chat" ? (
+            <div className="flex-1 overflow-hidden">
+              <ChatPanel
+                projectId={projectId}
+                tableId={selectedId}
+                tableName={selectedTable?.name}
+                placeholder={`${selectedTable?.name ?? "스키마"}에 할 일을 말해보세요 (Cmd+Enter)`}
+                examples={["crit_rate(number) 컬럼 추가해줘", "skills 테이블 만들어줘", "수집형 RPG 표준 컬럼 채워줘"]}
+                onDataChanged={() => { loadTables(); loadRelations(); if (selectedId) loadColumns(selectedId); }}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto px-3.5 py-2.5">
+              {tableRelations.length > 0 ? tableRelations.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 text-[11px] text-[#9a9aa3] py-0.5">
+                  <span className="font-medium">{tables.find((t) => t.id === r.from_table_id)?.name}.{r.from_column}</span>
+                  <span className="text-[#3a3a42]">→</span>
+                  <span>{tables.find((t) => t.id === r.to_table_id)?.name}.{r.to_column}</span>
+                </div>
+              )) : (
+                <div className="text-[11px] text-[#3a3a42] text-center py-6">설정된 관계가 없습니다 — 상단 &apos;관계 설정&apos;으로 추가하세요.</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <Modal open={showTableModal} onClose={() => setShowTableModal(false)} title="테이블 추가">

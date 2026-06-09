@@ -19,6 +19,9 @@ export function listColumns(tableId: string): Column[] {
 
 export function addColumn(data: { table_id: string; name: string; type: Column["type"]; description?: string; order_index?: number }): Column {
   const db = getDb();
+  // 같은 테이블 내 컬럼명 중복 방지 (헤드리스 AI가 같은 컬럼을 중복 생성하는 문제 차단)
+  const dup = db.prepare("SELECT id FROM columns WHERE table_id = ? AND name = ?").get(data.table_id, data.name);
+  if (dup) throw new Error(`이미 '${data.name}' 컬럼이 존재합니다.`);
   const id = newId();
   const now = Date.now();
   db.prepare(
