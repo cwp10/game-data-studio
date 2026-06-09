@@ -10,8 +10,10 @@ export const dynamic = "force-dynamic";
 function runClaude(prompt: string, system: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const bin = resolveClaudeBin();
+    // 마법사는 단순 구조 생성이라 빠르고 저렴한 모델로 충분 (WIZARD_MODEL 로 override)
+    const model = process.env.WIZARD_MODEL ?? "haiku";
     // MCP/툴 없이 순수 텍스트 생성만 (strict-mcp-config 로 외부 MCP 서버 미로드)
-    const child = spawn(bin, ["-p", "--output-format", "json", "--strict-mcp-config", "--append-system-prompt", system], {
+    const child = spawn(bin, ["-p", "--output-format", "json", "--strict-mcp-config", "--model", model, "--append-system-prompt", system], {
       cwd: process.cwd(),
       env: process.env,
     });
