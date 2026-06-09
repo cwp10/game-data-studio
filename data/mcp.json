@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "game-data-studio": {
+      "command": "node",
+      "args": ["--import", "tsx", "./src/lib/mcp/server.ts"],
+      "env": {
+        "GDS_DATA_DIR": "./data",
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    }
+  }
+}
