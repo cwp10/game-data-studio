@@ -24,6 +24,7 @@ export function TypeRegistry({ projectId }: { projectId: string }) {
     if (!modal) return;
     const values = modal.valuesText.split(",").map((v) => v.trim()).filter(Boolean);
     if (!modal.name.trim() || values.length === 0) { setError("이름과 값을 1개 이상 입력하세요."); return; }
+    if (values.some((v) => !/^[A-Za-z0-9_]+$/.test(v))) { setError("값은 영문자·숫자·밑줄(_)만 사용할 수 있습니다."); return; }
     const res = modal.id
       ? await fetch("/api/enum-types", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: modal.id, name: modal.name.trim(), values }) })
       : await fetch("/api/enum-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: projectId, name: modal.name.trim(), values }) });
@@ -93,8 +94,15 @@ export function TypeRegistry({ projectId }: { projectId: string }) {
               <Input placeholder="예: Grade" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
             </div>
             <div>
-              <div className="text-[11px] text-[#6b6b77] mb-1">허용값 (쉼표로 구분) *</div>
-              <Input placeholder="예: SSR, SR, R, N" value={modal.valuesText} onChange={(e) => setModal({ ...modal, valuesText: e.target.value })} />
+              <div className="text-[11px] text-[#6b6b77] mb-1">허용값 (쉼표로 구분) * — 영문·숫자·밑줄만 허용</div>
+              <Input
+                placeholder="예: SSR, SR, R, N"
+                value={modal.valuesText}
+                onChange={(e) => {
+                  const filtered = e.target.value.replace(/[^A-Za-z0-9_,\s]/g, "");
+                  setModal({ ...modal, valuesText: filtered });
+                }}
+              />
               <div className="flex flex-wrap gap-1 mt-2">
                 {modal.valuesText.split(",").map((v) => v.trim()).filter(Boolean).map((v, i) => (
                   <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1e1b4b] text-[#c4b5fd]">{v}</span>
