@@ -68,3 +68,11 @@ export function deleteRow(id: string): void {
 export function clearRows(tableId: string): void {
   getDb().prepare("DELETE FROM rows WHERE table_id = ?").run(tableId);
 }
+
+export function bulkDeleteRows(rowIds: string[]): void {
+  if (!rowIds.length) return;
+  const db = getDb();
+  const stmt = db.prepare("DELETE FROM rows WHERE id = ?");
+  const deleteMany = db.transaction((ids: string[]) => { for (const id of ids) stmt.run(id); });
+  deleteMany(rowIds);
+}

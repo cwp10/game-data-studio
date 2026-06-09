@@ -81,6 +81,26 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS snapshots (
+  id         TEXT PRIMARY KEY,
+  table_id   TEXT NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS economy_scenarios (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  data       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_table ON snapshots(table_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_economy_project ON economy_scenarios(project_id);
+
 CREATE INDEX IF NOT EXISTS idx_tables_project    ON tables(project_id);
 CREATE INDEX IF NOT EXISTS idx_columns_table     ON columns(table_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_rows_table        ON rows(table_id, order_index);
