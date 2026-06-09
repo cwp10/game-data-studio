@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Btn, SectionLabel } from "@/components/ui";
+import { LineChart } from "@/components/chart/LineChart";
 
 interface Table { id: string; name: string; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
@@ -12,6 +13,27 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
   const [results, setResults] = useState<BalanceResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalRows, setTotalRows] = useState(0);
+
+  // 크로스 테이블 비교
+  const [crossTableA, setCrossTableA] = useState("");
+  const [crossColA, setCrossColA] = useState("");
+  const [crossTableB, setCrossTableB] = useState("");
+  const [crossColB, setCrossColB] = useState("");
+  const [crossColsA, setCrossColsA] = useState<string[]>([]);
+  const [crossColsB, setCrossColsB] = useState<string[]>([]);
+  const [crossSeriesA, setCrossSeriesA] = useState<number[]>([]);
+  const [crossSeriesB, setCrossSeriesB] = useState<number[]>([]);
+
+  const loadNumericCols = async (tid: string, setter: (v: string[]) => void) => {
+    const d = await fetch(`/api/tables/${tid}`).then((r) => r.json());
+    setter((d.columns ?? []).filter((c: { type: string }) => c.type === "number").map((c: { name: string }) => c.name));
+  };
+
+  const loadCrossSeries = async (tid: string, col: string, setter: (v: number[]) => void) => {
+    if (!tid || !col) { setter([]); return; }
+    const rows = await fetch(`/api/rows?table_id=${tid}`).then((r) => r.json());
+    setter(rows.map((r: { data: Record<string, unknown> }) => Number(r.data[col])).filter(Number.isFinite));
+  };
 
   useEffect(() => {
     fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((ts: Table[]) => {
@@ -130,6 +152,50 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
           </div>
         </>
       )}
+
+      {/* 크로스 테이블 비교 */}
+      <SectionLabel>크로스 테이블 비교</SectionLabel>
+      <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl p-4 mb-6">
+        <div className="text-xs text-[#6b6b77] mb-3">두 테이블의 숫자 컬럼을 선택해 분포를 비교합니다.</div>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {[
+            { label: "A (보라)", tid: crossTableA, col: crossColA, cols: crossColsA,
+              onTid: async (v: string) => { setCrossTableA(v); setCrossColA(""); setCrossSeriesA([]); if (v) await loadNumericCols(v, setCrossColsA); },
+              onCol: (v: string) => { setCrossColA(v); loadCrossSeries(crossTableA, v, setCrossSeriesA); },
+            },
+            { label: "B (초록)", tid: crossTableB, col: crossColB, cols: crossColsB,
+              onTid: async (v: string) => { setCrossTableB(v); setCrossColB(""); setCrossSeriesB([]); if (v) await loadNumericCols(v, setCrossColsB); },
+              onCol: (v: string) => { setCrossColB(v); loadCrossSeries(crossTableB, v, setCrossSeriesB); },
+            },
+          ].map(({ label, tid, col, cols, onTid, onCol }) => (
+            <div key={label}>
+              <div className="text-[10px] text-[#4a4a55] mb-1">{label}</div>
+              <div className="space-y-1">
+                <select value={tid} onChange={(e) => onTid(e.target.value)} className="w-full bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#ededed] outline-none">
+                  <option value="">테이블 선택</option>
+                  {tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select value={col} onChange={(e) => onCol(e.target.value)} disabled={!tid} className="w-full bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#ededed] outline-none disabled:opacity-40">
+                  <option value="">컬럼 선택</option>
+                  {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+        {crossSeriesA.length > 0 || crossSeriesB.length > 0 ? (
+          <LineChart
+            height={200}
+            xLabels={Array.from({ length: Math.max(crossSeriesA.length, crossSeriesB.length) }, (_, i) => String(i + 1))}
+            series={[
+              ...(crossSeriesA.length > 0 ? [{ name: `${tables.find((t) => t.id === crossTableA)?.name}.${crossColA}`, color: "#7c3aed", values: crossSeriesA }] : []),
+              ...(crossSeriesB.length > 0 ? [{ name: `${tables.find((t) => t.id === crossTableB)?.name}.${crossColB}`, color: "#4ade80", values: crossSeriesB }] : []),
+            ]}
+          />
+        ) : (
+          <div className="text-[11px] text-[#3a3a42] text-center py-8">두 컬럼을 선택하면 비교 차트가 표시됩니다.</div>
+        )}
+      </div>
     </div>
   );
 }
