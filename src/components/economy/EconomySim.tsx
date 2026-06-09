@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Coins, Plus, X, TrendingUp, TrendingDown } from "lucide-react";
-import { Btn, SectionLabel } from "@/components/ui";
+import { SectionLabel } from "@/components/ui";
 import { LineChart } from "@/components/chart/LineChart";
+import { projectEconomy } from "@/lib/economy/project";
 
 interface Entry { id: number; name: string; amount: string; every: string }
 
@@ -41,24 +42,10 @@ export function EconomySim({ projectId }: { projectId: string }) {
   const update = (set: typeof setSources, id: number, patch: Partial<Entry>) => set((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   const remove = (set: typeof setSources, id: number) => set((prev) => prev.filter((e) => e.id !== id));
 
-  // 일자별 투영 계산
+  // 일자별 투영 계산 (코어 로직은 lib/economy/project)
   const N = Math.max(1, Math.min(num(days, 30), 365));
-  const dayAmt = (list: Entry[], d: number) => list.reduce((s, x) => {
-    const every = Math.max(1, num(x.every, 1));
-    return s + ((d - 1) % every === 0 ? num(x.amount) : 0);
-  }, 0);
-
-  let bal = num(start);
-  let cumInc = 0, cumSp = 0;
-  const balSeries: number[] = [], incSeries: number[] = [], spSeries: number[] = [];
-  let breakeven = -1;
-  for (let d = 1; d <= N; d++) {
-    const inc = dayAmt(sources, d), sp = dayAmt(sinks, d);
-    bal += inc - sp; cumInc += inc; cumSp += sp;
-    if (breakeven < 0 && bal >= 0 && num(start) < 0) breakeven = d;
-    balSeries.push(bal); incSeries.push(cumInc); spSeries.push(cumSp);
-  }
-  const net = cumInc - cumSp;
+  const toEntries = (list: Entry[]) => list.map((e) => ({ amount: num(e.amount), every: Math.max(1, num(e.every, 1)) }));
+  const { balSeries, incSeries, spSeries, cumInc, cumSp, net, finalBalance: bal } = projectEconomy(toEntries(sources), toEntries(sinks), N, num(start));
   const xLabels = Array.from({ length: N }, (_, i) => String(i + 1));
 
   const entryRows = (list: Entry[], set: typeof setSources, isSource: boolean) => (

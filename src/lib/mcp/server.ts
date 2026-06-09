@@ -10,6 +10,7 @@ import { deleteRelation, listRelations, setRelation } from "../db/repo/relations
 import { getSimulation, listSimulations, saveSimulation } from "../db/repo/simulations.js";
 import { readProjectMemory, writeProjectMemory } from "../memory/projectMemory.js";
 import { generateCurveIntoTable } from "../curve/apply.js";
+import { analyzeColumns } from "../balance/analyze.js";
 import fs from "fs";
 import path from "path";
 
@@ -199,29 +200,7 @@ server.tool(
   { table_id: z.string(), columns: z.array(z.string()).optional(), group_by: z.string().optional() },
   async ({ table_id, columns, group_by }) => {
     const targetCols = columns ?? listColumns(table_id).filter((c) => c.type === "number").map((c) => c.name);
-    const rows = readRows(table_id);
-    const results = [];
-    for (const col of targetCols) {
-      const groups: Record<string, Array<{ row_id: string; value: number }>> = {};
-      for (const row of rows) {
-        const raw = row.data[col];
-        if (typeof raw !== "number") continue;
-        const group = group_by ? String(row.data[group_by] ?? "_all") : "_all";
-        (groups[group] ??= []).push({ row_id: row.id, value: raw });
-      }
-      for (const [group, vals] of Object.entries(groups)) {
-        if (vals.length < 2) continue;
-        const nums = vals.map((v) => v.value);
-        const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
-        const stddev = Math.sqrt(nums.reduce((a, b) => a + (b - mean) ** 2, 0) / nums.length);
-        const anomalies = vals
-          .map((v) => ({ ...v, z_score: stddev > 0 ? Math.abs(v.value - mean) / stddev : 0 }))
-          .filter((v) => v.z_score > 2)
-          .map((v) => ({ ...v, severity: v.z_score > 3 ? "danger" : "warn" }));
-        results.push({ column: group_by ? `${col} [${group}]` : col, mean, stddev, min: Math.min(...nums), max: Math.max(...nums), anomalies });
-      }
-    }
-    return ok({ results, total_anomalies: results.reduce((a, r) => a + r.anomalies.length, 0) });
+    return ok(analyzeColumns(readRows(table_id), targetCols, group_by));
   }
 );
 
