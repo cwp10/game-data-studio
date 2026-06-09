@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Plus, Tags, Pencil, Trash2 } from "lucide-react";
-import { Btn, Modal, Input, SectionLabel } from "@/components/ui";
+import { Btn, Modal, Input, SectionLabel, Tooltip } from "@/components/ui";
 
 interface EnumType {
   id: string;
@@ -47,7 +47,7 @@ export function TypeRegistry({ projectId }: { projectId: string }) {
           <div className="text-[15px] font-semibold text-[#ededed] flex items-center gap-2"><Tags size={16} className="text-[#8b5cf6]" />타입</div>
           <div className="text-[11px] text-[#4a4a55] mt-0.5">재사용 enum 타입. 컬럼이 참조하며, 여기서 수정하면 모든 컬럼에 반영됩니다.</div>
         </div>
-        <Btn variant="primary" onClick={openNew}><Plus size={11} />새 타입</Btn>
+        <Tooltip label="새 타입 추가"><Btn variant="primary" onClick={openNew}><Plus size={11} /></Btn></Tooltip>
       </div>
 
       <div className="p-6">

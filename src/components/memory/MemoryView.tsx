@@ -1,7 +1,7 @@
 "use client";
 import { ReactNode, useEffect, useState } from "react";
 import { NotebookText, Pencil, Save, X, RefreshCw } from "lucide-react";
-import { Btn } from "@/components/ui";
+import { Btn, Tooltip } from "@/components/ui";
 
 // 인라인: **굵게** / `코드`
 function inline(text: string, keyBase: string): ReactNode[] {
@@ -80,13 +80,13 @@ export function MemoryView({ projectId }: { projectId: string }) {
         <div className="flex gap-1.5">
           {editing ? (
             <>
-              <Btn onClick={() => setEditing(false)}><X size={11} />취소</Btn>
-              <Btn variant="primary" onClick={save} disabled={saving}><Save size={11} />{saving ? "저장 중…" : "저장"}</Btn>
+              <Tooltip label="취소"><Btn onClick={() => setEditing(false)}><X size={11} /></Btn></Tooltip>
+              <Tooltip label={saving ? "저장 중…" : "저장"}><Btn variant="primary" onClick={save} disabled={saving}><Save size={11} /></Btn></Tooltip>
             </>
           ) : (
             <>
-              <Btn onClick={load}><RefreshCw size={11} />새로고침</Btn>
-              <Btn variant="primary" onClick={startEdit}><Pencil size={11} />편집</Btn>
+              <Tooltip label="새로고침"><Btn onClick={load}><RefreshCw size={11} /></Btn></Tooltip>
+              <Tooltip label="편집"><Btn variant="primary" onClick={startEdit}><Pencil size={11} /></Btn></Tooltip>
             </>
           )}
         </div>
