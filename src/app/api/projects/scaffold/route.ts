@@ -15,11 +15,10 @@ export async function POST(req: NextRequest) {
   const project = createProject({ name: name.trim(), genre, description });
   for (const t of (tables ?? []) as PlanTable[]) {
     if (!t?.name?.trim()) continue;
-    const table = createTable({ project_id: project.id, name: t.name.trim(), description: t.description });
-    (t.columns ?? []).forEach((c, i) => {
-      if (!c?.name?.trim()) return;
+    const table = createTable({ project_id: project.id, name: t.name.trim(), description: t.description }); // id 컬럼 자동 생성됨
+    (t.columns ?? []).filter((c) => c?.name?.trim() && c.name.trim().toLowerCase() !== "id").forEach((c, i) => {
       try {
-        addColumn({ table_id: table.id, name: c.name.trim(), type: (TYPES.has(c.type ?? "") ? c.type : "string") as "string" | "number" | "boolean" | "enum", description: c.description, order_index: i });
+        addColumn({ table_id: table.id, name: c.name.trim(), type: (TYPES.has(c.type ?? "") ? c.type : "string") as "string" | "number" | "boolean" | "enum", description: c.description, order_index: i + 1 });
       } catch { /* 중복 컬럼 등은 무시 */ }
     });
   }

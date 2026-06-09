@@ -58,9 +58,10 @@ server.tool(
     columns: z.array(z.object({ name: z.string(), type: z.enum(["string", "number", "boolean"]), description: z.string().optional() })).optional(),
   },
   async ({ project_id, name, description, columns }) => {
-    const table = createTable({ project_id, name, description });
-    const cols = (columns ?? []).map((c, i) =>
-      addColumn({ table_id: table.id, name: c.name, type: c.type, description: c.description, order_index: i })
+    const table = createTable({ project_id, name, description }); // id 컬럼 자동 생성됨
+    const provided = (columns ?? []).filter((c) => c.name.toLowerCase() !== "id");
+    const cols = provided.map((c, i) =>
+      addColumn({ table_id: table.id, name: c.name, type: c.type, description: c.description, order_index: i + 1 })
     );
     return ok({ table, columns: cols });
   }

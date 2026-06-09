@@ -1,5 +1,6 @@
 import { getDb } from "../client";
 import { newId } from "../../util/ids";
+import { listColumns } from "./columns";
 
 export interface Row {
   id: string;
@@ -46,6 +47,10 @@ export function upsertRow(tableId: string, id: string | undefined, data: Record<
   if (existing) {
     db.prepare("UPDATE rows SET data = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(data), now, rowId);
   } else {
+    // id 컬럼이 있는 테이블이면 비어있는 id를 유니크 값으로 자동 부여
+    if (data.id === undefined || data.id === null || data.id === "") {
+      if (listColumns(tableId).some((c) => c.name === "id")) data.id = rowId;
+    }
     const maxIdx = (db.prepare("SELECT MAX(order_index) as m FROM rows WHERE table_id = ?").get(tableId) as { m: number | null }).m ?? -1;
     db.prepare(
       "INSERT INTO rows (id, table_id, data, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
