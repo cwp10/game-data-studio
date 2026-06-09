@@ -1,15 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles } from "lucide-react";
+import { Plus, Upload, Download, Sparkles, Trash2 } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem } from "@/components/ui";
+import { type Screen } from "@/app/page";
 
 interface Table { id: string; name: string; }
 interface Column { id: string; name: string; type: "string" | "number" | "boolean"; }
 interface Row { id: string; data: Record<string, unknown>; }
-interface Anomaly { row_id: string; value: number; z_score: number; severity: "danger" | "warn"; }
+interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
 
-export function DataEditor({ projectId }: { projectId: string }) {
+export function DataEditor({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: Screen) => void }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
@@ -17,6 +18,8 @@ export function DataEditor({ projectId }: { projectId: string }) {
   const [balance, setBalance] = useState<BalanceResult[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
@@ -40,6 +43,13 @@ export function DataEditor({ projectId }: { projectId: string }) {
   const delRow = async (id: string) => {
     await fetch("/api/rows", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ row_id: id }) });
     setRows((prev) => prev.filter((r) => r.id !== id));
+    if (selectedRowId === id) setSelectedRowId(null);
+  };
+
+  const deleteSelected = () => {
+    if (!selectedRowId) return;
+    if (!confirm("선택한 행을 삭제합니다.")) return;
+    delRow(selectedRowId);
   };
 
   const saveCell = async (row: Row, col: string, val: string) => {
@@ -81,7 +91,26 @@ export function DataEditor({ projectId }: { projectId: string }) {
 
   const totalAnomalies = balance.reduce((a, b) => a + b.anomalies.filter((x) => x.severity === "danger").length, 0);
   const totalWarns = balance.reduce((a, b) => a + b.anomalies.filter((x) => x.severity === "warn").length, 0);
-  const activeResult = balance[0]; // 첫 번째 결과를 AI 패널에 표시
+  const activeResult = balance[0]; // 첫 번째 결과를 통계 패널에 표시
+
+  // z-score가 가장 높은(무시하지 않은) 이상값 1건을 AI 제안으로 표시
+  const anomKey = (rowId: string, col: string) => `${rowId}:${col}`;
+  const topAnomaly = balance
+    .flatMap((b) => b.anomalies.map((a) => ({ ...a, column: b.column, mean: b.mean, stddev: b.stddev })))
+    .filter((a) => !dismissed.has(anomKey(a.row_id, a.column)))
+    .sort((x, y) => y.z_score - x.z_score)[0];
+
+  const applyRecommended = () => {
+    if (!topAnomaly) return;
+    const row = rows.find((r) => r.id === topAnomaly.row_id);
+    if (!row) return;
+    saveCell(row, topAnomaly.column, String(Math.round(topAnomaly.mean)));
+  };
+
+  const dismissTop = () => {
+    if (!topAnomaly) return;
+    setDismissed((prev) => new Set(prev).add(anomKey(topAnomaly.row_id, topAnomaly.column)));
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -101,6 +130,7 @@ export function DataEditor({ projectId }: { projectId: string }) {
           {/* 툴바 */}
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
             <Btn variant="primary" onClick={addRow}><Plus size={11} />행 추가</Btn>
+            <Btn disabled={!selectedRowId} onClick={deleteSelected}><Trash2 size={11} />삭제</Btn>
             <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
             <Btn onClick={() => fileRef.current?.click()}><Upload size={11} />임포트</Btn>
             <Btn onClick={async () => {
@@ -138,12 +168,15 @@ export function DataEditor({ projectId }: { projectId: string }) {
                   {columns.map((c) => (
                     <th key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-left text-[11px] font-medium text-[#6b6b77] whitespace-nowrap">{c.name}</th>
                   ))}
-                  <th className="px-2.5 py-1.5 border-b border-[#2a2a2f] w-8"></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, idx) => (
-                  <tr key={row.id} className="hover:bg-[#1e1e24]">
+                  <tr
+                    key={row.id}
+                    onClick={() => setSelectedRowId(row.id)}
+                    className={`cursor-pointer ${selectedRowId === row.id ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
+                  >
                     <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#4a4a55] text-[11px] text-center">{idx + 1}</td>
                     {columns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
@@ -168,9 +201,6 @@ export function DataEditor({ projectId }: { projectId: string }) {
                         </td>
                       );
                     })}
-                    <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-center">
-                      <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delRow(row.id)}>×</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -182,23 +212,35 @@ export function DataEditor({ projectId }: { projectId: string }) {
       {/* 하단 AI 패널 */}
       <div className="h-[148px] border-t border-[#2a2a2f] flex flex-shrink-0 bg-[#16161a]">
         <div className="flex-1 px-4 py-3 border-r border-[#2a2a2f]">
-          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">AI 밸런싱 분석</div>
-          {activeResult ? (
-            <div className="bg-[#0f0f10] rounded-lg p-3 text-xs leading-relaxed text-[#ededed] border border-[#2a2a2f]">
-              <span className="font-semibold text-[#8b5cf6]">{activeResult.column}</span>
-              <span className="text-[#6b6b77]"> — 평균 </span>
-              <span className="font-medium">{activeResult.mean.toFixed(0)}</span>
-              <span className="text-[#6b6b77]">, 표준편차 ±{activeResult.stddev.toFixed(0)}</span>
-              {activeResult.anomalies.length > 0 && (
-                <span className="ml-2 text-[#f87171] text-[11px]">이상값 {activeResult.anomalies.length}건</span>
-              )}
-            </div>
+          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2 flex items-center gap-1.5">
+            <Sparkles size={11} className="text-[#8b5cf6]" />
+            AI 밸런싱 제안{topAnomaly && <span className="text-[#9a9aa3] normal-case tracking-normal font-medium">— {topAnomaly.label} {topAnomaly.column}</span>}
+          </div>
+          {topAnomaly ? (
+            <>
+              <div className="bg-[#0f0f10] rounded-lg p-3 text-xs leading-relaxed text-[#ededed] border border-[#2a2a2f]">
+                <span className={topAnomaly.severity === "danger" ? "text-[#f87171]" : "text-[#f59e0b]"}>현재 {topAnomaly.value.toLocaleString()}</span>
+                <span className="text-[#6b6b77]">은(는) {topAnomaly.column} 평균({topAnomaly.mean.toFixed(0)})의 </span>
+                <span className={topAnomaly.severity === "danger" ? "text-[#f87171]" : "text-[#f59e0b]"}>{(topAnomaly.value / topAnomaly.mean).toFixed(1)}배</span>
+                <span className="text-[#6b6b77]">입니다.</span><br />
+                <span className="text-[#6b6b77]">권장 범위: </span>
+                <span className="text-[#4ade80] font-medium">{Math.round(topAnomaly.mean - topAnomaly.stddev).toLocaleString()} ~ {Math.round(topAnomaly.mean + topAnomaly.stddev).toLocaleString()}</span>
+                <span className="text-[#4a4a55] text-[11px]"> (±1σ 기준)</span>
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                <Btn variant="primary" onClick={applyRecommended}>권장값 적용</Btn>
+                <Btn onClick={() => onNavigate?.("balance")}>상세 분석</Btn>
+                <Btn onClick={dismissTop}>무시</Btn>
+              </div>
+            </>
           ) : (
-            <div className="bg-[#0f0f10] rounded-lg p-3 text-xs text-[#4a4a55] border border-[#2a2a2f]">✦ AI 분석 버튼을 클릭하면 이상값을 분석합니다.</div>
+            <div className="bg-[#0f0f10] rounded-lg p-3 text-xs text-[#4a4a55] border border-[#2a2a2f]">
+              {balance.length > 0 ? "✓ 감지된 이상값이 없습니다." : "✦ AI 분석 버튼을 클릭하면 이상값을 분석합니다."}
+            </div>
           )}
         </div>
         <div className="w-[190px] px-4 py-3 flex-shrink-0">
-          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">통계</div>
+          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">{activeResult ? `통계 — ${activeResult.column}` : "통계"}</div>
           {activeResult ? (
             <div className="space-y-1">
               {[

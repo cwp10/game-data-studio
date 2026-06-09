@@ -9,12 +9,13 @@ export async function POST(req: NextRequest) {
   const results = [];
 
   for (const col of targetCols) {
-    const groups: Record<string, Array<{ row_id: string; value: number }>> = {};
+    const groups: Record<string, Array<{ row_id: string; label: string; value: number }>> = {};
     for (const row of rows) {
       const raw = row.data[col];
       if (typeof raw !== "number") continue;
       const group = group_by ? String(row.data[group_by] ?? "_all") : "_all";
-      (groups[group] ??= []).push({ row_id: row.id, value: raw });
+      const label = String(row.data.name ?? row.data.id ?? row.id);
+      (groups[group] ??= []).push({ row_id: row.id, label, value: raw });
     }
     for (const [group, vals] of Object.entries(groups)) {
       if (vals.length < 2) continue;

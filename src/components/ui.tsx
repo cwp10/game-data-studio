@@ -29,6 +29,10 @@ export function Badge({ variant, children }: { variant: "ssr" | "sr" | "r" | "n"
   return <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full ${styles[variant]}`}>{children}</span>;
 }
 
+export function PkBadge() {
+  return <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1a1a1c] text-[#6b6b77] border border-[#2a2a2f] ml-1.5 align-middle">PK</span>;
+}
+
 export function TypeBadge({ type }: { type: "string" | "number" | "boolean" }) {
   const styles = {
     number: "bg-[#1e1b4b] text-[#c4b5fd]",

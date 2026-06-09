@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus, Link2 } from "lucide-react";
-import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge } from "@/components/ui";
+import { Plus, Link2, FileText, Lock } from "lucide-react";
+import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge } from "@/components/ui";
 
 interface Table { id: string; name: string; description: string | null; }
 interface Column { id: string; name: string; type: "string" | "number" | "boolean"; description: string | null; }
@@ -102,6 +102,15 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedTable?.name ?? "테이블 선택"}>
           <Btn onClick={() => setShowRelModal(true)}><Link2 size={11} />관계 설정</Btn>
+          <Btn disabled={!selectedId} onClick={async () => {
+            if (!selectedId) return;
+            const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
+            const blob = await res.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = (selectedTable?.name ?? "export") + ".csv";
+            a.click();
+          }}><FileText size={11} />CSV</Btn>
           <Btn variant="primary" onClick={() => setShowColModal(true)}><Plus size={11} />컬럼 추가</Btn>
         </ContentHeader>
 
@@ -117,19 +126,25 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
               </tr>
             </thead>
             <tbody>
-              {columns.map((c) => (
+              {columns.map((c) => {
+                const isPk = c.name === "id";
+                return (
                 <tr key={c.id} className="hover:bg-[#1e1e24]">
-                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#ededed]">{c.name}</td>
+                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#ededed]">{c.name}{isPk && <PkBadge />}</td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]"><TypeBadge type={c.type} /></td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]">
                     {(() => { const ref = getColumnRef(c.name); return ref ? <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-[#3d0a1e] text-[#f9a8d4]">→ {ref}</span> : <span className="text-[#2a2a2f]">—</span>; })()}
                   </td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77]">{c.description}</td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-center">
-                    <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delCol(c.id)}>×</button>
+                    {isPk
+                      ? <Lock size={11} className="inline text-[#3a3a42]" />
+                      : <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delCol(c.id)}>×</button>
+                    }
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {selectedId && (
                 <tr>
                   <td colSpan={5} className="text-center text-[#4a4a55] py-2.5 text-[11px] cursor-pointer hover:bg-[#1e1e24]" onClick={() => setShowColModal(true)}>

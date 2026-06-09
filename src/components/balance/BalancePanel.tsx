@@ -4,7 +4,7 @@ import { Sparkles } from "lucide-react";
 import { Btn, SectionLabel } from "@/components/ui";
 
 interface Table { id: string; name: string; }
-interface Anomaly { row_id: string; value: number; z_score: number; severity: "danger" | "warn"; }
+interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; min: number; max: number; anomalies: Anomaly[]; }
 
 export function BalancePanel({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: "editor") => void }) {
@@ -68,11 +68,13 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
           <div key={i} className="px-4 py-3 border-b border-[#2a2a2f] last:border-0 flex items-center gap-3">
             <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.sev === "danger" ? "bg-[#ef4444]" : "bg-[#f59e0b]"}`} />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-[#ededed]">{a.column}</div>
-              <div className="text-[11px] text-[#6b6b77]">평균 {a.mean.toFixed(0)} 대비 {(a.value / a.mean).toFixed(1)}배</div>
+              <div className="text-xs font-medium text-[#ededed]">{a.label} — {a.column}</div>
+              <div className="text-[11px] text-[#6b6b77]">
+                {a.value === 0 ? "누락값 의심 (0)" : `평균(${a.mean.toFixed(0)})의 ${(a.value / a.mean).toFixed(1)}배 ${a.sev === "danger" ? "초과" : "(경계값)"}`}
+              </div>
             </div>
             <span className={`text-xs font-semibold ${a.sev === "danger" ? "text-[#f87171]" : "text-[#f59e0b]"}`}>{a.value.toLocaleString()}</span>
-            <Btn className="text-[11px] py-0.5 px-2" onClick={() => onNavigate?.("editor")}>수정</Btn>
+            <Btn className="text-[11px] py-0.5 px-2" onClick={() => onNavigate?.("editor")}>{a.sev === "danger" ? "수정" : "검토"}</Btn>
           </div>
         ))}
         {dangers.length + warns.length === 0 && (

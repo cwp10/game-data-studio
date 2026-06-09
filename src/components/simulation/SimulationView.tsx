@@ -82,6 +82,20 @@ export function SimulationView({ projectId }: { projectId: string }) {
 
   const selectedSim = simulations.find((s) => s.id === selectedSimId);
 
+  // 스냅샷에서 수식 검증용 샘플 입력 행 추출 (첫 입력 테이블 기준 상위 3행)
+  const sampleCases = (() => {
+    const firstTid = selectedTables[0];
+    if (!snapshot || !firstTid) return [];
+    const snap = (snapshot as Record<string, { rows?: { data: Record<string, unknown> }[] }>)[firstTid];
+    if (!snap?.rows) return [];
+    const cols = selectedCols.filter((c) => c.startsWith(`${firstTid}.`)).map((c) => c.split(".").slice(1).join("."));
+    if (cols.length === 0) return [];
+    return snap.rows.slice(0, 3).map((r) => ({
+      label: String(r.data.name ?? r.data.id ?? "행"),
+      values: cols.map((cn) => `${cn} ${typeof r.data[cn] === "number" ? (r.data[cn] as number).toLocaleString() : r.data[cn] ?? "—"}`).join(" · "),
+    }));
+  })();
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* 좌측 시뮬레이션 목록 */}
@@ -167,6 +181,19 @@ export function SimulationView({ projectId }: { projectId: string }) {
               {selectedSim?.formula_cs && <span className="text-[10px] text-[#4ade80] font-medium">✓ 저장됨</span>}
             </div>
             <CsCodeBlock code={selectedSim?.formula_cs ?? formula ?? "// 시뮬레이션을 실행하면 Unity C# 수식이 여기에 표시됩니다."} />
+            {sampleCases.length > 0 && (
+              <div className="border-t border-[#2a2a2f] px-4 py-3">
+                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-wide mb-2">테스트 케이스 — 샘플 입력</div>
+                <div className="space-y-1">
+                  {sampleCases.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between text-[11px] gap-3">
+                      <span className="text-[#6b6b77] flex-shrink-0">{c.label}</span>
+                      <span className="text-[#9a9aa3] font-medium text-right">{c.values}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {snapshot && (

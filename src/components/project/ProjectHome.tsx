@@ -11,12 +11,13 @@ interface Project {
   description: string | null;
   table_count: number;
   row_count: number;
+  anomaly_count: number;
   updated_at: number;
 }
 
 const GENRES = ["수집형 RPG", "방치형 RPG", "전략", "퍼즐", "기타"];
 
-export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, projectId?: string) => void }) {
+export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, projectId?: string, projectName?: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", genre: "", description: "" });
@@ -76,7 +77,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
                 <div
                   key={p.id}
                   className="group bg-[#16161a] border border-[#2a2a2f] rounded-xl p-4 cursor-pointer hover:border-[#7c3aed]/40 hover:bg-[#1a1a1c] transition-colors"
-                  onClick={() => onNavigate("schema", p.id)}
+                  onClick={() => onNavigate("schema", p.id, p.name)}
                 >
                   <div className="flex items-start justify-between mb-3">
                     {p.genre
@@ -84,7 +85,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
                       : <div />
                     }
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#ededed] hover:bg-[#2a2a2f]" onClick={(e) => { e.stopPropagation(); onNavigate("schema", p.id); }}>편집</button>
+                      <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#ededed] hover:bg-[#2a2a2f]" onClick={(e) => { e.stopPropagation(); onNavigate("schema", p.id, p.name); }}>편집</button>
                       <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#f87171] hover:bg-[#2a2a2f]" onClick={(e) => { e.stopPropagation(); del(p.id); }}>삭제</button>
                     </div>
                   </div>
@@ -93,6 +94,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
                   <div className="flex items-center gap-3 pt-3 border-t border-[#2a2a2f]">
                     <div className="text-[11px] text-[#4a4a55]">테이블 <span className="text-[#9a9aa3] font-medium">{p.table_count}</span></div>
                     <div className="text-[11px] text-[#4a4a55]">행 <span className="text-[#9a9aa3] font-medium">{p.row_count.toLocaleString()}</span></div>
+                    <div className="text-[11px] text-[#4a4a55]">이상값 <span className={`font-medium ${p.anomaly_count > 0 ? "text-[#f87171]" : "text-[#4ade80]"}`}>{p.anomaly_count}</span></div>
                     <div className="ml-auto text-[10px] text-[#3a3a42]">{fmt(p.updated_at)}</div>
                   </div>
                 </div>

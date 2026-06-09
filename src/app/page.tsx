@@ -12,9 +12,11 @@ export type Screen = "home" | "schema" | "editor" | "balance" | "simulation";
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
 
-  const navigate = (s: Screen, pid?: string) => {
+  const navigate = (s: Screen, pid?: string, pname?: string) => {
     if (pid) setProjectId(pid);
+    if (pname) setProjectName(pname);
     setScreen(s);
   };
 
@@ -25,9 +27,9 @@ export default function App() {
         <div className="w-2.5 h-2.5 rounded-full bg-[#E24B4A]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#EF9F27]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#639922]" />
-        {projectId && screen !== "home" && (
-          <span className="text-xs text-[#4a4a55] ml-2">{screen}</span>
-        )}
+        <span className="text-xs text-[#4a4a55] ml-2">
+          Game Data Studio{projectId && projectName ? ` — ${projectName}` : ""}
+        </span>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -36,7 +38,7 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden">
           {screen === "home" && <ProjectHome onNavigate={navigate} />}
           {screen === "schema" && projectId && <SchemaEditor projectId={projectId} />}
-          {screen === "editor" && projectId && <DataEditor projectId={projectId} />}
+          {screen === "editor" && projectId && <DataEditor projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "balance" && projectId && <BalancePanel projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "simulation" && projectId && <SimulationView projectId={projectId} />}
           {screen !== "home" && !projectId && (

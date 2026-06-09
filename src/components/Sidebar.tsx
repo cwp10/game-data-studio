@@ -26,19 +26,22 @@ export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: 
 
       {/* 네비게이션 */}
       <nav className="flex flex-col pt-2 flex-1">
-        {NAV.map(({ id, Icon, label }) => (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 text-left border-l-2 transition-colors ${
-              current === id
-                ? "bg-[#1e1e24] text-[#ededed] border-[#7c3aed]"
-                : "text-[#6b6b77] border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3]"
-            }`}
-          >
-            <Icon size={16} className={current === id ? "text-[#8b5cf6]" : ""} />
-            <span className="text-[12px]">{label}</span>
-          </button>
+        {NAV.map(({ id, Icon, label }, i) => (
+          <div key={id} className="contents">
+            <button
+              onClick={() => onChange(id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left border-l-2 transition-colors ${
+                current === id
+                  ? "bg-[#1e1e24] text-[#ededed] border-[#7c3aed]"
+                  : "text-[#6b6b77] border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3]"
+              }`}
+            >
+              <Icon size={16} className={current === id ? "text-[#8b5cf6]" : ""} />
+              <span className="text-[12px]">{label}</span>
+            </button>
+            {/* 프로젝트 홈 아래 구분선 */}
+            {i === 0 && <div className="mx-4 my-1.5 h-px bg-[#2a2a2f]" />}
+          </div>
         ))}
       </nav>
 
