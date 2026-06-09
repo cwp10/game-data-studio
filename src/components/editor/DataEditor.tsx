@@ -320,7 +320,6 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* 툴바 */}
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1 flex-shrink-0">
-            <Btn variant="primary" onClick={addRow}><Plus size={11} />행 추가</Btn>
             <Btn title="선택 삭제" disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn>
             {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6] px-1">{selectedRowIds.size}행</span>}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
@@ -420,7 +419,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                   <tr
                     key={row.id}
                     onClick={(e) => handleRowClick(row.id, e)}
-                    className={`cursor-pointer ${selectedRowIds.has(row.id) ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
+                    className={`cursor-pointer border-b border-[#2a2a2f] ${selectedRowIds.has(row.id) ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
                   >
                     <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#4a4a55] text-[11px] text-center">{idx + 1}</td>
                     {visibleColumns.map((c) => {
@@ -459,6 +458,13 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                     })}
                   </tr>
                 ))}
+                {!searchQuery && (
+                  <tr className="hover:bg-[#1e1e24] cursor-pointer" onClick={addRow}>
+                    <td colSpan={visibleColumns.length + 1} className="px-2.5 py-2.5 text-center text-[11px] text-[#4a4a55] hover:text-[#6b6b77]">
+                      <Plus size={11} className="inline -mt-px mr-1" />행 추가
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
