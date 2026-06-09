@@ -61,8 +61,19 @@ CREATE TABLE IF NOT EXISTS simulations (
   updated_at   INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  table_id   TEXT,                                              -- 작성 시점에 보던 테이블(태그용, FK 아님)
+  role       TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
+  content    TEXT NOT NULL,
+  tool_name  TEXT,                                              -- role='tool' 일 때 호출된 MCP 툴 이름
+  created_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tables_project    ON tables(project_id);
 CREATE INDEX IF NOT EXISTS idx_columns_table     ON columns(table_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_rows_table        ON rows(table_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_relations_project ON relations(project_id);
 CREATE INDEX IF NOT EXISTS idx_simulations_project ON simulations(project_id);
+CREATE INDEX IF NOT EXISTS idx_chat_project      ON chat_messages(project_id, created_at);
