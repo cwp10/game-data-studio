@@ -9,3 +9,4 @@ data/*.db-wal
 .DS_Store
 dist/
 tsconfig.tsbuildinfo
+pnpm-lock.yaml
