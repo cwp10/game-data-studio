@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteRow, readRows, upsertRow } from "@/lib/db/repo/rows";
+import { bulkDeleteRows, deleteRow, readRows, upsertRow } from "@/lib/db/repo/rows";
 
 export async function GET(req: NextRequest) {
   const tableId = req.nextUrl.searchParams.get("table_id");
@@ -15,7 +15,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { row_id } = await req.json();
-  deleteRow(row_id);
+  const body = await req.json();
+  if (body.row_ids && Array.isArray(body.row_ids)) {
+    bulkDeleteRows(body.row_ids);
+    return NextResponse.json({ deleted: body.row_ids.length });
+  }
+  deleteRow(body.row_id);
   return NextResponse.json({ deleted: true });
 }
