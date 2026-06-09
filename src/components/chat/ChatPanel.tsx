@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Send, Wrench, Sparkles, Loader2 } from "lucide-react";
+import { Send, Wrench, Sparkles, Loader2, Square } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -10,6 +10,20 @@ interface ChatMessage {
 }
 
 const SERVER_PREFIX = "mcp__game-data-studio__";
+
+// 경량 인라인 마크다운: **굵게** 와 `코드` 만 처리 (줄바꿈은 whitespace-pre-wrap)
+function Inline({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold text-white">{p.slice(2, -2)}</strong>;
+        if (p.startsWith("`") && p.endsWith("`")) return <code key={i} className="px-1 rounded bg-[#0f0f10] text-[#c4b5fd] text-[11px]">{p.slice(1, -1)}</code>;
+        return <span key={i}>{p}</span>;
+      })}
+    </>
+  );
+}
 
 export function ChatPanel({
   projectId,
@@ -33,6 +47,7 @@ export function ChatPanel({
   const [liveTools, setLiveTools] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadHistory = () =>
     fetch(`/api/chat?project_id=${projectId}`).then((r) => r.json()).then(setMessages).catch(() => {});
@@ -54,11 +69,14 @@ export function ChatPanel({
     // 낙관적 사용자 메시지
     setMessages((prev) => [...prev, { id: `tmp-${Date.now()}`, role: "user", content: text, tool_name: null }]);
 
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project_id: projectId, table_id: tableId, message: text }),
+        signal: ac.signal,
       });
       if (!res.body) throw new Error("스트림을 받을 수 없습니다.");
 
@@ -98,8 +116,12 @@ export function ChatPanel({
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+      // 사용자가 중단한 경우는 오류로 표시하지 않음
+      if (!(e instanceof DOMException && e.name === "AbortError")) {
+        setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
+      }
     } finally {
+      abortRef.current = null;
       setStreaming(false);
       setLiveText("");
       setLiveTools([]);
@@ -107,6 +129,8 @@ export function ChatPanel({
       onDataChanged?.();        // 스키마/데이터 변경 반영
     }
   };
+
+  const stop = () => abortRef.current?.abort();
 
   const empty = messages.length === 0 && !streaming;
 
@@ -149,7 +173,7 @@ export function ChatPanel({
             </div>
           ) : (
             <div key={m.id} className="flex">
-              <div className="max-w-[88%] text-xs leading-relaxed text-[#ededed] whitespace-pre-wrap">{m.content}</div>
+              <div className="max-w-[88%] text-xs leading-relaxed text-[#ededed] whitespace-pre-wrap"><Inline text={m.content} /></div>
             </div>
           )
         )}
@@ -164,7 +188,7 @@ export function ChatPanel({
                 </span>
               </div>
             ))}
-            {liveText && <div className="text-xs leading-relaxed text-[#ededed] whitespace-pre-wrap max-w-[88%]">{liveText}</div>}
+            {liveText && <div className="text-xs leading-relaxed text-[#ededed] whitespace-pre-wrap max-w-[88%]"><Inline text={liveText} /></div>}
             <div className="flex items-center gap-1.5 text-[11px] text-[#4a4a55]"><Loader2 size={12} className="animate-spin" />처리 중…</div>
           </div>
         )}
@@ -183,13 +207,23 @@ export function ChatPanel({
             placeholder={placeholder ?? "무엇을 도와드릴까요? (Cmd+Enter 전송)"}
             className="flex-1 bg-transparent text-xs text-[#ededed] placeholder:text-[#4a4a55] resize-none outline-none max-h-24 leading-relaxed"
           />
-          <button
-            onClick={send}
-            disabled={streaming || !input.trim()}
-            className="flex-shrink-0 w-7 h-7 rounded-lg bg-[#7c3aed] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#6d28d9] transition-colors"
-          >
-            {streaming ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-          </button>
+          {streaming ? (
+            <button
+              onClick={stop}
+              title="중단"
+              className="flex-shrink-0 w-7 h-7 rounded-lg bg-[#2a2a2f] text-[#ededed] flex items-center justify-center hover:bg-[#3a3a42] transition-colors"
+            >
+              <Square size={11} className="fill-current" />
+            </button>
+          ) : (
+            <button
+              onClick={send}
+              disabled={!input.trim()}
+              className="flex-shrink-0 w-7 h-7 rounded-lg bg-[#7c3aed] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#6d28d9] transition-colors"
+            >
+              <Send size={13} />
+            </button>
+          )}
         </div>
       </div>
     </div>
