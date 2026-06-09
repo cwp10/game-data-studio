@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Btn, GradeBadge, PanelHeader, PanelItem } from "@/components/ui";
+import { Btn, GradeBadge, PanelHeader, PanelItem, PillTab } from "@/components/ui";
 
 interface Table { id: string; name: string; }
 interface Column { id: string; name: string; type: "string" | "number" | "boolean"; }
@@ -98,9 +98,26 @@ export function DataEditor({ projectId }: { projectId: string }) {
         {/* 데이터 그리드 */}
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* 툴바 */}
-          <div className="h-10 border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
+          <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-2 flex-shrink-0">
             <Btn variant="primary" onClick={addRow}>＋ 행 추가</Btn>
-            <Btn onClick={() => fileRef.current?.click()}>↑ CSV 임포트</Btn>
+            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
+            <PillTab
+              tabs={[{ id: "import", label: "↑ 임포트" }, { id: "export", label: "↓ 익스포트" }]}
+              active=""
+              onChange={(id) => {
+                if (id === "import") fileRef.current?.click();
+                if (id === "export") {
+                  if (!selectedId) return;
+                  fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) })
+                    .then((r) => r.blob()).then((blob) => {
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
+                      a.click();
+                    });
+                }
+              }}
+            />
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selectedId) return;
@@ -110,18 +127,9 @@ export function DataEditor({ projectId }: { projectId: string }) {
               loadData(selectedId);
               runBalance();
             }} />
-            <Btn onClick={async () => {
-              if (!selectedId) return;
-              const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
-              const blob = await res.blob();
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
-              a.click();
-            }}>↓ CSV 익스포트</Btn>
-            <div className="w-px h-4.5 bg-[#3a3a42] mx-1" />
+            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
             <Btn onClick={runBalance}>✦ AI 분석</Btn>
-            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#3a3a42] rounded-md text-[11px] text-[#4a4a55] w-32">
+            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#2a2a2f] rounded-lg text-[11px] text-[#4a4a55] w-32 bg-[#16161a]">
               🔍 검색...
             </div>
           </div>

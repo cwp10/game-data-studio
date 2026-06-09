@@ -1,37 +1,46 @@
 "use client";
 import { type Screen } from "@/app/page";
 
-const NAV = [
-  { id: "home" as Screen, icon: "⌂", title: "프로젝트 홈" },
-  { id: "schema" as Screen, icon: "⊞", title: "스키마 에디터" },
-  { id: "editor" as Screen, icon: "▤", title: "데이터 에디터" },
-  { id: "balance" as Screen, icon: "▦", title: "밸런싱 패널" },
-  { id: "simulation" as Screen, icon: "▷", title: "시뮬레이션" },
+const NAV: { id: Screen; icon: string; label: string }[] = [
+  { id: "home", icon: "⌂", label: "프로젝트" },
+  { id: "schema", icon: "⊞", label: "스키마" },
+  { id: "editor", icon: "▤", label: "데이터" },
+  { id: "balance", icon: "▦", label: "밸런싱" },
+  { id: "simulation", icon: "▷", label: "시뮬레이션" },
 ];
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
   return (
-    <div className="w-[52px] bg-[#16161a] border-r border-[#2a2a2f] flex flex-col items-center py-3 gap-1.5 flex-shrink-0">
-      <button
-        title="프로젝트 홈"
-        onClick={() => onChange("home")}
-        className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === "home" ? "bg-[#1e1e24] text-[#8b5cf6]" : "text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]"}`}
-      >
-        ⌂
-      </button>
-      <div className="w-6 h-px bg-[#2a2a2f]" />
-      {NAV.slice(1).map((n) => (
-        <button
-          key={n.id}
-          title={n.title}
-          onClick={() => onChange(n.id)}
-          className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === n.id ? "bg-[#1e1e24] text-[#8b5cf6]" : "text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]"}`}
-        >
-          {n.icon}
+    <div className="w-[160px] bg-[#16161a] border-r border-[#2a2a2f] flex flex-col flex-shrink-0">
+      <div className="px-4 py-3 border-b border-[#2a2a2f]">
+        <div className="text-[11px] font-semibold text-[#ededed] tracking-wide uppercase">Game Data</div>
+        <div className="text-[10px] text-[#4a4a55] mt-0.5">Studio</div>
+      </div>
+
+      <nav className="flex flex-col py-2 flex-1">
+        {NAV.map((n) => (
+          <button
+            key={n.id}
+            title={n.label}
+            onClick={() => onChange(n.id)}
+            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left border-l-2 transition-colors ${
+              current === n.id
+                ? "bg-[#1e1e24] text-[#ededed] border-[#8b5cf6]"
+                : "text-[#6b6b77] border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3]"
+            }`}
+          >
+            <span className={`text-sm flex-shrink-0 ${current === n.id ? "text-[#8b5cf6]" : ""}`}>{n.icon}</span>
+            <span className="text-xs">{n.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="border-t border-[#2a2a2f] py-2">
+        <button className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[#6b6b77] border-l-2 border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3] transition-colors">
+          <span className="text-sm flex-shrink-0">⚙</span>
+          <span className="text-xs">설정</span>
         </button>
-      ))}
-      <div className="flex-1" />
-      <button title="설정" className="w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]">⚙</button>
+      </div>
     </div>
   );
 }

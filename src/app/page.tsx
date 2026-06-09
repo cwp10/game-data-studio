@@ -25,7 +25,9 @@ export default function App() {
         <div className="w-2.5 h-2.5 rounded-full bg-[#E24B4A]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#EF9F27]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#639922]" />
-        <span className="text-xs text-[#6b6b77] ml-2">Game Data Studio{projectId && screen !== "home" ? " — " + screen : ""}</span>
+        {projectId && screen !== "home" && (
+          <span className="text-xs text-[#4a4a55] ml-2">{screen}</span>
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">

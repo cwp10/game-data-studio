@@ -55,7 +55,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
       <SectionLabel>최근 프로젝트</SectionLabel>
       <div className="grid grid-cols-3 gap-3">
         {projects.map((p) => (
-          <div key={p.id} className="bg-[#1a1a1c] border border-[#2a2a2f] rounded-xl p-4 cursor-pointer hover:border-[#3a3a42]" onClick={() => onNavigate("schema", p.id)}>
+          <div key={p.id} className="bg-[#1a1a1c] border border-[#2a2a2f] rounded-xl p-4 cursor-pointer hover:border-[#7c3aed]/50 hover:bg-[#1e1e24] transition-colors" onClick={() => onNavigate("schema", p.id)}>
             {p.genre && <div className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-[#1e1b4b] text-[#c4b5fd] mb-2">{p.genre}</div>}
             <div className="text-sm font-medium mb-1 text-[#ededed]">{p.name}</div>
             {p.description && <div className="text-[11px] text-[#6b6b77] mb-2">{p.description}</div>}
@@ -73,11 +73,11 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
           </div>
         ))}
         <div
-          className="border border-dashed border-[#3a3a42] rounded-xl flex flex-col items-center justify-center gap-2 min-h-[140px] text-[#4a4a55] cursor-pointer hover:border-[#6b6b77]"
+          className="border border-dashed border-[#2a2a2f] rounded-xl flex flex-col items-center justify-center gap-2 min-h-[140px] text-[#4a4a55] cursor-pointer hover:border-[#7c3aed]/50 hover:text-[#6b6b77] transition-colors"
           onClick={() => setShowModal(true)}
         >
           <div className="text-2xl">＋</div>
-          <div className="text-sm">새 프로젝트 만들기</div>
+          <div className="text-xs">새 프로젝트 만들기</div>
         </div>
       </div>
 

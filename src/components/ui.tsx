@@ -6,11 +6,11 @@ export function Btn({
   className = "",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "primary" | "success" }) {
-  const base = "inline-flex items-center gap-1 px-2.5 py-1 border rounded-md text-[11px] cursor-pointer whitespace-nowrap";
+  const base = "inline-flex items-center gap-1 px-2.5 py-1 border rounded-md text-[11px] cursor-pointer whitespace-nowrap transition-colors";
   const variants = {
-    default: "bg-[#1a1a1c] border-[#3a3a42] text-[#9a9aa3] hover:bg-[#1e1e24]",
-    primary: "bg-[#1e1b4b] border-[#7c3aed] text-[#c4b5fd] hover:bg-[#2e1d6e]",
-    success: "bg-[#052e16] border-[#16a34a] text-[#4ade80] hover:bg-[#064e1e]",
+    default: "bg-[#1a1a1c] border-[#2a2a2f] text-[#9a9aa3] hover:bg-[#1e1e24] hover:border-[#3a3a42] hover:text-[#ededed]",
+    primary: "bg-[#7c3aed] border-[#7c3aed] text-white hover:bg-[#6d28d9]",
+    success: "bg-[#16a34a] border-[#16a34a] text-white hover:bg-[#15803d]",
   };
   return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
 }
@@ -73,11 +73,27 @@ export function SectionLabel({ children, className = "" }: { children: ReactNode
 export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-[#1a1a1c] border border-[#2a2a2f] rounded-xl shadow-xl p-5 w-[400px] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
-        <div className="text-sm font-medium mb-4 text-[#ededed]">{title}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#16161a] border border-[#2a2a2f] rounded-2xl shadow-2xl p-5 w-[420px] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+        <div className="text-sm font-semibold mb-4 text-[#ededed]">{title}</div>
         {children}
       </div>
+    </div>
+  );
+}
+
+export function PillTab({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
+  return (
+    <div className="flex gap-0.5 p-0.5 bg-[#16161a] rounded-lg border border-[#2a2a2f]">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`px-2.5 py-1 rounded-md text-[11px] transition-colors ${active === t.id ? "bg-[#1e1e24] text-[#8b5cf6] font-medium" : "text-[#6b6b77] hover:text-[#9a9aa3]"}`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }

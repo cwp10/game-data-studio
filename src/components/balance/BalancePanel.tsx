@@ -47,9 +47,9 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
           { label: "경고", val: warns.length, cls: warns.length > 0 ? "text-[#f59e0b]" : "" },
           { label: "밸런스 점수", val: score, cls: score >= 80 ? "text-[#4ade80]" : score >= 60 ? "text-[#f59e0b]" : "text-[#f87171]" },
         ].map((m) => (
-          <div key={m.label} className="bg-[#1a1a1c] rounded-lg p-3">
-            <div className="text-[11px] text-[#6b6b77] mb-1">{m.label}</div>
-            <div className={`text-[22px] font-medium text-[#ededed] ${m.cls}`}>{m.val}</div>
+          <div key={m.label} className="bg-[#16161a] border border-[#2a2a2f] rounded-xl p-3.5">
+            <div className="text-[10px] font-medium text-[#4a4a55] uppercase tracking-wide mb-1.5">{m.label}</div>
+            <div className={`text-[24px] font-semibold text-[#ededed] ${m.cls}`}>{m.val}</div>
           </div>
         ))}
       </div>
