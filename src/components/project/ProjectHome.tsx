@@ -55,7 +55,6 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
           <div className="text-[15px] font-semibold text-[#ededed]">프로젝트</div>
           <div className="text-[11px] text-[#4a4a55] mt-0.5">{projects.length}개의 프로젝트</div>
         </div>
-        <Btn variant="primary" onClick={() => setShowModal(true)}><Plus size={11} />새 프로젝트</Btn>
       </div>
 
       <div className="p-6">
