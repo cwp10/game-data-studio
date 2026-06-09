@@ -2,15 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { addColumn, listColumns } from "@/lib/db/repo/columns";
 import { readRows, upsertRow } from "@/lib/db/repo/rows";
 import { getTable } from "@/lib/db/repo/tables";
-
-function parseCSV(content: string): { headers: string[]; rows: string[][] } {
-  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter(Boolean);
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-  const rows = lines.slice(1).map((line) =>
-    line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""))
-  );
-  return { headers, rows };
-}
+import { parseCSV } from "@/lib/util/csv";
 
 export async function POST(req: NextRequest) {
   const { action, table_id, csv_content } = await req.json();

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "node:child_process";
-import { resolveClaudeBin } from "@/lib/util/claude";
+import { spawnClaude } from "@/lib/util/claude";
 
 // claude 헤드리스 호출이 필요하므로 Node 런타임 고정
 export const runtime = "nodejs";
@@ -9,20 +8,18 @@ export const dynamic = "force-dynamic";
 // claude -p --output-format json 으로 호출하고 assistant 최종 텍스트를 반환
 function runClaude(prompt: string, system: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const bin = resolveClaudeBin();
     // 마법사는 단순 구조 생성이라 빠르고 저렴한 모델로 충분 (WIZARD_MODEL 로 override)
     const model = process.env.WIZARD_MODEL ?? "haiku";
     // MCP/툴 없이 순수 텍스트 생성만 (strict-mcp-config 로 외부 MCP 서버 미로드)
-    const child = spawn(bin, ["-p", "--output-format", "json", "--strict-mcp-config", "--model", model, "--append-system-prompt", system], {
-      cwd: process.cwd(),
-      env: process.env,
-    });
+    const child = spawnClaude(
+      ["-p", "--output-format", "json", "--strict-mcp-config", "--model", model, "--append-system-prompt", system],
+      { input: prompt },
+    );
     let out = "";
     let err = "";
     child.stdout.on("data", (c: Buffer) => (out += c.toString()));
     child.stderr.on("data", (c: Buffer) => (err += c.toString()));
     child.on("error", reject);
-    child.stdin.on("error", () => { /* EPIPE 등 — close 에서 처리 */ });
     child.on("close", () => {
       try {
         const o = JSON.parse(out);
@@ -31,8 +28,6 @@ function runClaude(prompt: string, system: string): Promise<string> {
         reject(new Error("claude 응답 파싱 실패: " + (err || out).slice(0, 300)));
       }
     });
-    child.stdin.write(prompt);
-    child.stdin.end();
   });
 }
 

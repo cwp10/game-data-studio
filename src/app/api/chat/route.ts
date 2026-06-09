@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "node:child_process";
 import { getTable } from "@/lib/db/repo/tables";
 import { listColumns } from "@/lib/db/repo/columns";
 import { getProject } from "@/lib/db/repo/projects";
 import { readProjectMemory } from "@/lib/memory/projectMemory";
 import { addMessage, listMessages, clearMessages } from "@/lib/db/repo/chat";
-import { resolveClaudeBin } from "@/lib/util/claude";
+import { spawnClaude } from "@/lib/util/claude";
+import { MCP_TOOL_PREFIX, mcpTool } from "@/lib/mcp/constants";
 
 // 프로젝트 대화 이력 로드
 export async function GET(req: NextRequest) {
@@ -26,9 +26,6 @@ export async function DELETE(req: NextRequest) {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SERVER = "game-data-studio";
-const tool = (name: string) => `mcp__${SERVER}__${name}`;
-
 // 채팅에서 허용하는 MCP 툴 (스키마 + 데이터 범위)
 const ALLOWED_TOOLS = [
   "list_projects", "list_tables", "list_relations", "read_rows", "analyze_balance",
@@ -36,10 +33,10 @@ const ALLOWED_TOOLS = [
   "upsert_row", "delete_row", "import_csv", "export_csv", "generate_curve",
   "list_enum_types", "create_enum_type", "update_enum_type", "delete_enum_type",
   "get_project_memory", "update_project_memory",
-].map(tool);
+].map(mcpTool);
 
 // 채팅에서 절대 호출 금지 (치명적 삭제)
-const DISALLOWED_TOOLS = ["delete_project", "delete_table"].map(tool);
+const DISALLOWED_TOOLS = ["delete_project", "delete_table"].map(mcpTool);
 
 function buildSystemPrompt(projectId: string, tableId?: string, tableName?: string): string {
   const project = getProject(projectId);
@@ -88,7 +85,6 @@ export async function POST(req: NextRequest) {
   // 사용자 메시지 즉시 저장
   addMessage({ project_id, table_id, role: "user", content: message });
 
-  const bin = resolveClaudeBin();
   // 보안: bypassPermissions(전체 우회) 대신 정확한 allowlist만 사용한다.
   // 헤드리스(-p)에서 allowedTools 에 나열한 툴만 프롬프트 없이 실행되고 나머지는 거부된다.
   const args = [
@@ -110,13 +106,8 @@ export async function POST(req: NextRequest) {
       const close = () => { if (!closed) { closed = true; controller.close(); } };
 
       // detached: 자식(claude)이 spawn한 MCP 서버까지 프로세스 그룹째 종료할 수 있게 한다.
-      const child = spawn(bin, args, { cwd: process.cwd(), env: process.env, detached: true });
-
       // 프롬프트는 stdin 으로 전달 (인자 이스케이프 회피).
-      // claude 가 즉시 죽으면 stdin write 에서 EPIPE 가 날 수 있으므로 핸들러로 흡수.
-      child.stdin.on("error", () => { /* EPIPE 등 — child error/close 에서 처리됨 */ });
-      child.stdin.write(message);
-      child.stdin.end();
+      const child = spawnClaude(args, { input: message, detached: true });
 
       // 영속화용: 어시스턴트 텍스트 + 툴 호출을 순서대로 수집
       const transcript: { role: "assistant" | "tool"; content: string; tool_name?: string }[] = [];
@@ -128,9 +119,9 @@ export async function POST(req: NextRequest) {
           for (const b of content as { type: string; text?: string; name?: string }[]) {
             if (b.type === "text" && b.text?.trim()) {
               transcript.push({ role: "assistant", content: b.text });
-            } else if (b.type === "tool_use" && b.name?.startsWith(`mcp__${SERVER}__`)) {
+            } else if (b.type === "tool_use" && b.name?.startsWith(MCP_TOOL_PREFIX)) {
               // 내부 메커니즘(ToolSearch 등)은 제외하고 실제 game-data 툴만, 짧은 이름으로 저장
-              const short = b.name.replace(`mcp__${SERVER}__`, "");
+              const short = b.name.replace(MCP_TOOL_PREFIX, "");
               transcript.push({ role: "tool", content: short, tool_name: short });
             }
           }

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Send, Wrench, Sparkles, Loader2, Square } from "lucide-react";
+import { MCP_TOOL_PREFIX } from "@/lib/mcp/constants";
 
 interface ChatMessage {
   id: string;
@@ -8,8 +9,6 @@ interface ChatMessage {
   content: string;
   tool_name: string | null;
 }
-
-const SERVER_PREFIX = "mcp__game-data-studio__";
 
 // 경량 인라인 마크다운: **굵게** 와 `코드` 만 처리 (줄바꿈은 whitespace-pre-wrap)
 function Inline({ text }: { text: string }) {
@@ -111,8 +110,8 @@ export function ChatPanel({
           if (o.type === "assistant") {
             for (const b of o.message?.content ?? []) {
               if (b.type === "text" && b.text?.trim()) { acc += (acc ? "\n\n" : "") + b.text; setLiveText(acc); }
-              else if (b.type === "tool_use" && b.name?.startsWith(SERVER_PREFIX)) {
-                tools.push(b.name.replace(SERVER_PREFIX, ""));
+              else if (b.type === "tool_use" && b.name?.startsWith(MCP_TOOL_PREFIX)) {
+                tools.push(b.name.replace(MCP_TOOL_PREFIX, ""));
                 setLiveTools([...tools]);
               }
             }
