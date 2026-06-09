@@ -33,11 +33,12 @@ export function PkBadge() {
   return <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1a1a1c] text-[#6b6b77] border border-[#2a2a2f] ml-1.5 align-middle">PK</span>;
 }
 
-export function TypeBadge({ type }: { type: "string" | "number" | "boolean" }) {
+export function TypeBadge({ type }: { type: "string" | "number" | "boolean" | "enum" }) {
   const styles = {
     number: "bg-[#1e1b4b] text-[#c4b5fd]",
     string: "bg-[#052e16] text-[#4ade80]",
     boolean: "bg-[#2d1a00] text-[#fbbf24]",
+    enum: "bg-[#3d0a1e] text-[#f9a8d4]",
   };
   return <span className={`text-[10px] px-1.5 py-0.5 rounded ${styles[type]}`}>{type}</span>;
 }

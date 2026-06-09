@@ -6,10 +6,11 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { type Screen } from "@/app/page";
 
 interface Table { id: string; name: string; }
-interface Column { id: string; name: string; type: "string" | "number" | "boolean"; }
+interface Column { id: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
 interface Row { id: string; data: Record<string, unknown>; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
+interface EnumType { id: string; name: string; values: string[]; }
 
 export function DataEditor({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: Screen) => void }) {
   const [tables, setTables] = useState<Table[]>([]);
@@ -17,6 +18,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [columns, setColumns] = useState<Column[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [balance, setBalance] = useState<BalanceResult[]>([]);
+  const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -29,7 +31,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns)),
     fetch(`/api/rows?table_id=${tid}`).then((r) => r.json()).then(setRows),
   ]);
+  const enumValuesFor = (col: Column): string[] => enumTypes.find((e) => e.id === col.enum_type_id)?.values ?? [];
 
+  useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
   useEffect(() => { if (selectedId) loadData(selectedId); }, [selectedId]);
 
@@ -82,6 +86,11 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const GRADE_VALUES = new Set(["SSR", "SR", "R", "N"]);
   const renderCell = (col: Column, val: unknown) => {
     const s = String(val ?? "");
+    if (col.type === "enum") {
+      if (!s) return <span className="text-[#3a3a42]">—</span>;
+      if (GRADE_VALUES.has(s.toUpperCase())) return <GradeBadge grade={s.toUpperCase()} />;
+      return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1e1b4b] text-[#c4b5fd]">{s}</span>;
+    }
     if (col.type === "string" && GRADE_VALUES.has(s.toUpperCase())) {
       return <GradeBadge grade={s.toUpperCase()} />;
     }
@@ -185,7 +194,18 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                       const isEditing = editing?.rowId === row.id && editing?.col === c.name;
                       return (
                         <td key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap" onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}>
-                          {isEditing ? (
+                          {isEditing && c.type === "enum" ? (
+                            <select
+                              autoFocus
+                              className="w-full px-1 py-0.5 border border-[#7c3aed] rounded text-xs outline-none bg-[#1e1b4b] text-[#ededed]"
+                              value={editVal}
+                              onChange={(e) => saveCell(row, c.name, e.target.value)}
+                              onBlur={() => setEditing(null)}
+                            >
+                              <option value="">—</option>
+                              {enumValuesFor(c).map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          ) : isEditing ? (
                             <input
                               autoFocus
                               className="w-full px-1 py-0.5 border border-[#7c3aed] rounded text-xs outline-none bg-[#1e1b4b] text-[#ededed]"

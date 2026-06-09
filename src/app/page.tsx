@@ -7,8 +7,9 @@ import { DataEditor } from "@/components/editor/DataEditor";
 import { BalancePanel } from "@/components/balance/BalancePanel";
 import { SimulationView } from "@/components/simulation/SimulationView";
 import { MemoryView } from "@/components/memory/MemoryView";
+import { TypeRegistry } from "@/components/types/TypeRegistry";
 
-export type Screen = "home" | "schema" | "editor" | "balance" | "simulation" | "memory";
+export type Screen = "home" | "schema" | "editor" | "balance" | "simulation" | "memory" | "types";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -43,6 +44,7 @@ export default function App() {
           {screen === "balance" && projectId && <BalancePanel projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "simulation" && projectId && <SimulationView projectId={projectId} />}
           {screen === "memory" && projectId && <MemoryView projectId={projectId} />}
+          {screen === "types" && projectId && <TypeRegistry projectId={projectId} />}
           {screen !== "home" && !projectId && (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
               <div className="w-12 h-12 rounded-2xl bg-[#16161a] border border-[#2a2a2f] flex items-center justify-center">

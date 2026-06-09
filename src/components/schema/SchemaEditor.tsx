@@ -5,18 +5,20 @@ import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeB
 import { ChatPanel } from "@/components/chat/ChatPanel";
 
 interface Table { id: string; name: string; description: string | null; }
-interface Column { id: string; name: string; type: "string" | "number" | "boolean"; description: string | null; }
+interface Column { id: string; name: string; type: "string" | "number" | "boolean" | "enum"; description: string | null; enum_type_id: string | null; }
 interface Relation { id: string; from_table_id: string; from_column: string; to_table_id: string; to_column: string; }
+interface EnumType { id: string; name: string; values: string[]; }
 
 export function SchemaEditor({ projectId }: { projectId: string }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
+  const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [showTableModal, setShowTableModal] = useState(false);
   const [showColModal, setShowColModal] = useState(false);
   const [tableForm, setTableForm] = useState({ name: "", description: "" });
-  const [colForm, setColForm] = useState({ name: "", type: "string" as Column["type"], description: "" });
+  const [colForm, setColForm] = useState({ name: "", type: "string" as Column["type"], description: "", enum_type_id: "" });
   const [showRelModal, setShowRelModal] = useState(false);
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
@@ -25,10 +27,11 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
   const loadRelations = () => fetch(`/api/relations?project_id=${projectId}`).then((r) => r.json()).then(setRelations);
+  const loadEnumTypes = () => fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {});
   const loadToColumns = (tid: string) =>
     fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setToColumns(d.columns));
 
-  useEffect(() => { loadTables(); loadRelations(); }, [projectId]);
+  useEffect(() => { loadTables(); loadRelations(); loadEnumTypes(); }, [projectId]);
   useEffect(() => { if (selectedId) loadColumns(selectedId); }, [selectedId]);
 
   const createTable = async () => {
@@ -48,9 +51,17 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
 
   const addCol = async () => {
     if (!selectedId || !colForm.name.trim()) return;
-    await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, ...colForm }) });
+    if (colForm.type === "enum" && !colForm.enum_type_id) return; // enum이면 타입 선택 필수
+    const payload = {
+      table_id: selectedId,
+      name: colForm.name,
+      type: colForm.type,
+      description: colForm.description,
+      enum_type_id: colForm.type === "enum" ? colForm.enum_type_id : null,
+    };
+    await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setShowColModal(false);
-    setColForm({ name: "", type: "string", description: "" });
+    setColForm({ name: "", type: "string", description: "", enum_type_id: "" });
     loadColumns(selectedId);
   };
 
@@ -133,7 +144,10 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
                 return (
                 <tr key={c.id} className="hover:bg-[#1e1e24]">
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#ededed]">{c.name}{isPk && <PkBadge />}</td>
-                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]"><TypeBadge type={c.type} /></td>
+                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]">
+                    <TypeBadge type={c.type} />
+                    {c.type === "enum" && <span className="ml-1.5 text-[10px] text-[#8b5cf6]">{enumTypes.find((e) => e.id === c.enum_type_id)?.name ?? "?"}</span>}
+                  </td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]">
                     {(() => { const ref = getColumnRef(c.name); return ref ? <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-[#3d0a1e] text-[#f9a8d4]">→ {ref}</span> : <span className="text-[#2a2a2f]">—</span>; })()}
                   </td>
@@ -223,8 +237,22 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
               <option value="string">string</option>
               <option value="number">number</option>
               <option value="boolean">boolean</option>
+              <option value="enum">enum (선택지)</option>
             </Select>
           </div>
+          {colForm.type === "enum" && (
+            <div>
+              <div className="text-[11px] text-[#9a9aa3] mb-1">enum 타입 *</div>
+              {enumTypes.length > 0 ? (
+                <Select value={colForm.enum_type_id} onChange={(e) => setColForm({ ...colForm, enum_type_id: e.target.value })}>
+                  <option value="">선택</option>
+                  {enumTypes.map((et) => <option key={et.id} value={et.id}>{et.name} ({et.values.join("/")})</option>)}
+                </Select>
+              ) : (
+                <div className="text-[11px] text-[#6b6b77] bg-[#0f0f10] border border-[#2a2a2f] rounded-lg px-3 py-2">정의된 타입이 없습니다. 좌측 &apos;타입&apos; 화면에서 먼저 만들어주세요.</div>
+              )}
+            </div>
+          )}
           <div>
             <div className="text-[11px] text-[#9a9aa3] mb-1">설명</div>
             <Input placeholder="선택 사항" value={colForm.description} onChange={(e) => setColForm({ ...colForm, description: e.target.value })} />
