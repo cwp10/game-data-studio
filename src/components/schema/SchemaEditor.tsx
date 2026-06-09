@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Plus, Link2, FileText, Lock, MessageSquare, Pencil, ChevronUp, ChevronDown } from "lucide-react";
-import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge, BottomTab } from "@/components/ui";
+import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge, BottomTab, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 
 interface Table { id: string; name: string; description: string | null; }
@@ -126,17 +126,20 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
       {/* 메인: 컬럼 목록 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedTable?.name ?? "테이블 선택"}>
-          <Btn onClick={() => setShowRelModal(true)}><Link2 size={11} />관계 설정</Btn>
-          <Btn disabled={!selectedId} onClick={async () => {
-            if (!selectedId) return;
-            const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
-            const blob = await res.blob();
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = (selectedTable?.name ?? "export") + ".csv";
-            a.click();
-          }}><FileText size={11} />CSV</Btn>
-          <Btn variant="primary" onClick={openNewCol}><Plus size={11} />컬럼 추가</Btn>
+          <Tooltip label="관계 설정">
+            <Btn onClick={() => setShowRelModal(true)}><Link2 size={11} /></Btn>
+          </Tooltip>
+          <Tooltip label="CSV 내보내기">
+            <Btn disabled={!selectedId} onClick={async () => {
+              if (!selectedId) return;
+              const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
+              const blob = await res.blob();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = (selectedTable?.name ?? "export") + ".csv";
+              a.click();
+            }}><FileText size={11} /></Btn>
+          </Tooltip>
         </ContentHeader>
 
         <div className="flex-1 overflow-auto">
