@@ -23,7 +23,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
   const [bottomTab, setBottomTab] = useState<"chat" | "relations">("chat");
-  const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(() => localStorage.getItem("schema:bottomCollapsed") === "1");
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadColumns = (tid: string) => fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns));
@@ -203,7 +203,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
             <Link2 size={12} />관계{tableRelations.length > 0 && <span className="ml-0.5 text-[#4a4a55]">{tableRelations.length}</span>}
           </BottomTab>
           <button
-            onClick={() => setBottomCollapsed((v) => !v)}
+            onClick={() => setBottomCollapsed((v) => { localStorage.setItem("schema:bottomCollapsed", v ? "0" : "1"); return !v; })}
             title={bottomCollapsed ? "펼치기" : "아래로 숨기기"}
             className="ml-auto mr-1 text-[#6b6b77] hover:text-[#ededed] transition-colors p-1"
           >

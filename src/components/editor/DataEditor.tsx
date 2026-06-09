@@ -32,7 +32,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [snapshots, setSnapshots] = useState<{ id: string; name: string; created_at: number }[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
-  const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(() => localStorage.getItem("editor:bottomCollapsed") === "1");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);
@@ -480,7 +480,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           <BottomTab active={bottomTab === "balance"} onClick={() => setBottomTab("balance")}><BarChart3 size={12} />밸런싱 분석</BottomTab>
           <BottomTab active={bottomTab === "chart"} onClick={() => setBottomTab("chart")}><TrendingUp size={12} />차트</BottomTab>
           <button
-            onClick={() => setBottomCollapsed((v) => !v)}
+            onClick={() => setBottomCollapsed((v) => { localStorage.setItem("editor:bottomCollapsed", v ? "0" : "1"); return !v; })}
             title={bottomCollapsed ? "펼치기" : "아래로 숨기기"}
             className="ml-auto mr-1 text-[#6b6b77] hover:text-[#ededed] transition-colors p-1"
           >
