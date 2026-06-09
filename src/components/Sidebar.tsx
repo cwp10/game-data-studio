@@ -19,12 +19,13 @@ export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: 
 
   return (
     <div className={`${collapsed ? "w-[52px]" : "w-[168px]"} bg-[#16161a] border-r border-[#2a2a2f] flex flex-col flex-shrink-0 transition-[width] duration-150`}>
-      {/* 접기 토글 */}
-      <div className={`flex items-center px-2 pt-2 pb-1 ${collapsed ? "justify-center" : "justify-end"}`}>
+      {/* 헤더: 타이틀 + 접기 토글 */}
+      <div className={`flex items-center px-2 pt-2 pb-1 ${collapsed ? "justify-center" : "justify-between"}`}>
+        {!collapsed && <span className="text-[12px] font-semibold text-[#ededed] pl-1.5 truncate">Game Data Studio</span>}
         <button
           onClick={() => setCollapsed((v) => !v)}
           title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}
-          className="text-[#6b6b77] hover:text-[#ededed] hover:bg-[#1a1a1c] rounded-md p-1.5 transition-colors"
+          className="flex-shrink-0 text-[#6b6b77] hover:text-[#ededed] hover:bg-[#1a1a1c] rounded-md p-1.5 transition-colors"
         >
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
