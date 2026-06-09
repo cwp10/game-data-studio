@@ -11,27 +11,27 @@ const NAV = [
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
   return (
-    <div className="w-[52px] bg-[#f8f7f4] border-r border-[#e8e6e0] flex flex-col items-center py-3 gap-1.5 flex-shrink-0">
+    <div className="w-[52px] bg-[#16161a] border-r border-[#2a2a2f] flex flex-col items-center py-3 gap-1.5 flex-shrink-0">
       <button
         title="프로젝트 홈"
         onClick={() => onChange("home")}
-        className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === "home" ? "bg-white text-[#185FA5]" : "text-[#999] hover:bg-white hover:text-[#333]"}`}
+        className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === "home" ? "bg-[#1e1e24] text-[#8b5cf6]" : "text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]"}`}
       >
         ⌂
       </button>
-      <div className="w-6 h-px bg-[#e0ded8]" />
+      <div className="w-6 h-px bg-[#2a2a2f]" />
       {NAV.slice(1).map((n) => (
         <button
           key={n.id}
           title={n.title}
           onClick={() => onChange(n.id)}
-          className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === n.id ? "bg-white text-[#185FA5]" : "text-[#999] hover:bg-white hover:text-[#333]"}`}
+          className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg ${current === n.id ? "bg-[#1e1e24] text-[#8b5cf6]" : "text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]"}`}
         >
           {n.icon}
         </button>
       ))}
       <div className="flex-1" />
-      <button title="설정" className="w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg text-[#999] hover:bg-white hover:text-[#333]">⚙</button>
+      <button title="설정" className="w-[34px] h-[34px] rounded-lg flex items-center justify-center text-lg text-[#6b6b77] hover:bg-[#1e1e24] hover:text-[#ededed]">⚙</button>
     </div>
   );
 }

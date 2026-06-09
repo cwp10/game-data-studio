@@ -19,13 +19,13 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-[#0f0f10]">
       {/* macOS titlebar */}
-      <div className="h-9 bg-[#f1efe8] border-b border-[#ddd] flex items-center px-3 gap-1.5 flex-shrink-0">
+      <div className="h-9 bg-[#0f0f10] border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
         <div className="w-2.5 h-2.5 rounded-full bg-[#E24B4A]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#EF9F27]" />
         <div className="w-2.5 h-2.5 rounded-full bg-[#639922]" />
-        <span className="text-xs text-[#888] ml-2">Game Data Studio{projectId && screen !== "home" ? " — " + screen : ""}</span>
+        <span className="text-xs text-[#6b6b77] ml-2">Game Data Studio{projectId && screen !== "home" ? " — " + screen : ""}</span>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -38,7 +38,7 @@ export default function App() {
           {screen === "balance" && projectId && <BalancePanel projectId={projectId} onNavigate={(s) => setScreen(s)} />}
           {screen === "simulation" && projectId && <SimulationView projectId={projectId} />}
           {screen !== "home" && !projectId && (
-            <div className="flex-1 flex items-center justify-center text-[#aaa] text-sm">
+            <div className="flex-1 flex items-center justify-center text-[#4a4a55] text-sm">
               프로젝트를 먼저 선택하세요
             </div>
           )}
