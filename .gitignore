@@ -11,3 +11,4 @@ data/project-memory/
 dist/
 tsconfig.tsbuildinfo
 pnpm-lock.yaml
+next-env.d.ts
