@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import { getTable } from "@/lib/db/repo/tables";
 import { listColumns } from "@/lib/db/repo/columns";
+import { getProject } from "@/lib/db/repo/projects";
+import { readProjectMemory } from "@/lib/memory/projectMemory";
 import { addMessage, listMessages, clearMessages } from "@/lib/db/repo/chat";
 
 // 프로젝트 대화 이력 로드
@@ -31,16 +33,27 @@ const ALLOWED_TOOLS = [
   "list_projects", "list_tables", "list_relations", "read_rows", "analyze_balance",
   "create_table", "add_column", "remove_column", "set_relation",
   "upsert_row", "delete_row", "import_csv", "export_csv",
+  "get_project_memory", "update_project_memory",
 ].map(tool);
 
 // 채팅에서 절대 호출 금지 (치명적 삭제)
 const DISALLOWED_TOOLS = ["delete_project", "delete_table"].map(tool);
 
 function buildSystemPrompt(projectId: string, tableId?: string, tableName?: string): string {
+  const project = getProject(projectId);
+  const memory = readProjectMemory(projectId);
   const lines = [
     "당신은 Game Data Studio의 게임 데이터 기획 어시스턴트입니다.",
     `현재 작업 중인 프로젝트 id는 "${projectId}" 입니다.`,
   ];
+  if (project) {
+    lines.push(`프로젝트: ${project.name}${project.genre ? ` (장르: ${project.genre})` : ""}${project.description ? ` — ${project.description}` : ""}`);
+  }
+  // 프로젝트 메모리 주입: 세션이 stateless이므로 이 파일이 대화 간 맥락을 잇는다.
+  lines.push("");
+  lines.push("## 프로젝트 메모리 (이전 대화에서 누적된 맥락 — 항상 먼저 반영)");
+  lines.push(memory.trim() ? memory.trim() : "(아직 기록된 메모리가 없습니다.)");
+  lines.push("");
   if (tableId) {
     lines.push(`현재 보고 있는 테이블은 id "${tableId}"${tableName ? ` (이름: ${tableName})` : ""} 입니다.`);
     // 현재 테이블의 컬럼 스키마를 주입 (값 없는 컬럼은 행 data에 키가 없어 추정이 불가하므로)
@@ -55,6 +68,7 @@ function buildSystemPrompt(projectId: string, tableId?: string, tableName?: stri
     "- 항상 위 project_id / table_id 스코프 안에서만 동작합니다.",
     "- 컬럼 존재 여부는 위 '컬럼 정의'를 기준으로 판단하세요(행 데이터에 키가 없어도 컬럼은 존재할 수 있습니다).",
     "- 프로젝트·테이블 삭제는 절대 하지 마세요.",
+    "- 새로운 설계 결정·네이밍/수치 규칙·밸런싱 방침·진행 상황 등 다음 대화에서도 알아야 할 맥락이 생기면, update_project_memory 로 '프로젝트 메모리'를 갱신해 맥락을 이어가세요. 기존 메모리를 보존하면서 정리·추가한 마크다운 전체를 전달합니다(사소한 일회성 작업은 기록하지 않습니다).",
     "- 작업을 마치면 무엇을 했는지 한국어로 한두 문장으로 요약하세요.",
   );
   return lines.join("\n");

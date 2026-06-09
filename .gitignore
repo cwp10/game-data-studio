@@ -4,6 +4,7 @@ out/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/project-memory/
 .env
 .env.local
 .DS_Store

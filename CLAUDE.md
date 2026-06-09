@@ -27,6 +27,7 @@ claude mcp add --transport stdio game-data-studio -- node --import tsx ./src/lib
 - **관계**: list_relations, set_relation, delete_relation
 - **밸런싱**: analyze_balance
 - **시뮬레이션**: run_simulation, list_simulations, save_simulation
+- **프로젝트 메모리**: get_project_memory, update_project_memory (대화 간 맥락 유지용 `data/project-memory/<id>.md`)
 
 ## 아키텍처
 - DB: `data/game-data-studio.db` (WAL 모드, FK 활성화)
