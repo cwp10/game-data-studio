@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
@@ -25,7 +25,11 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
-  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [showColToggle, setShowColToggle] = useState(false);
+  const [snapshots, setSnapshots] = useState<{ id: string; name: string; created_at: number }[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
@@ -35,6 +39,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
   const fileRef = useRef<HTMLInputElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClickedRowRef = useRef<string | null>(null);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadData = (tid: string) => Promise.all([
@@ -46,6 +51,16 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
   useEffect(() => { if (selectedId) loadData(selectedId); }, [selectedId]);
+
+  // 테이블 전환 시 숨김 컬럼 초기화
+  useEffect(() => setHiddenCols(new Set()), [selectedId]);
+
+  // 스냅샷 목록 로드 (테이블 전환 시)
+  const loadSnapshots = () => {
+    if (!selectedId) return;
+    fetch(`/api/snapshots?table_id=${selectedId}`).then((r) => r.json()).then(setSnapshots).catch((e) => console.error(e));
+  };
+  useEffect(() => { loadSnapshots(); }, [selectedId]);
 
   // 차트 기본 축: 테이블이 바뀔 때 1회 초기화 (level 우선). 같은 테이블 내 편집 시엔 사용자 선택 보존.
   const chartTableRef = useRef<string | null>(null);
@@ -74,16 +89,39 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setRows((prev) => [...prev, row]);
   };
 
-  const delRow = async (id: string) => {
-    await fetch("/api/rows", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ row_id: id }) });
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    if (selectedRowId === id) setSelectedRowId(null);
+  const handleRowClick = (rowId: string, e: React.MouseEvent) => {
+    if (e.shiftKey && lastClickedRowRef.current) {
+      // 범위 선택: filteredRows에서 lastClickedRowRef ~ rowId 사이 전체
+      const ids = filteredRows.map((r) => r.id);
+      const a = ids.indexOf(lastClickedRowRef.current);
+      const b = ids.indexOf(rowId);
+      const [from, to] = a < b ? [a, b] : [b, a];
+      setSelectedRowIds(new Set(ids.slice(from, to + 1)));
+    } else if (e.metaKey || e.ctrlKey) {
+      // 개별 토글
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(rowId)) next.delete(rowId); else next.add(rowId);
+        return next;
+      });
+    } else {
+      setSelectedRowIds(new Set([rowId]));
+    }
+    lastClickedRowRef.current = rowId;
   };
 
-  const deleteSelected = () => {
-    if (!selectedRowId) return;
-    if (!confirm("선택한 행을 삭제합니다.")) return;
-    delRow(selectedRowId);
+  const deleteSelected = async () => {
+    if (!selectedRowIds.size) return;
+    if (!confirm(`${selectedRowIds.size}행을 삭제합니다.`)) return;
+    const ids = Array.from(selectedRowIds);
+    await fetch("/api/rows", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ row_ids: ids }),
+    });
+    setRows((prev) => prev.filter((r) => !selectedRowIds.has(r.id)));
+    setSelectedRowIds(new Set());
+    scheduleBalance();
   };
 
   const saveCell = async (row: Row, col: string, val: string) => {
@@ -180,6 +218,68 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     runBalance();
   };
 
+  // 검색 필터
+  const filteredRows = searchQuery.trim()
+    ? rows.filter((r) =>
+        columns.some((c) => String(r.data[c.name] ?? "").toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : rows;
+
+  // 컬럼 가시성 (id 컬럼은 항상 표시)
+  const visibleColumns = columns.filter((c) => !hiddenCols.has(c.name));
+
+  // JSON 내보내기
+  const exportJson = () => {
+    if (!selectedId) return;
+    const t = tables.find((t) => t.id === selectedId);
+    const data = JSON.stringify(rows.map((r) => r.data), null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (t?.name ?? "export") + ".json";
+    a.click();
+  };
+
+  // 스냅샷 저장
+  const saveSnapshot = async () => {
+    if (!selectedId) return;
+    const name = prompt("스냅샷 이름:");
+    if (!name) return;
+    await fetch("/api/snapshots", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, name }) });
+    loadSnapshots();
+  };
+
+  // 스냅샷 복원
+  const restoreSnapshot = async (snapshotId: string, snapName: string) => {
+    if (!confirm(`"${snapName}" 스냅샷으로 복원합니다. 현재 데이터가 대체됩니다.`)) return;
+    await fetch("/api/snapshots", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore", table_id: selectedId, snapshot_id: snapshotId }) });
+    if (selectedId) loadData(selectedId);
+    runBalance();
+  };
+
+  // 이상값 전체 보정
+  const applyAllAnomalies = async () => {
+    const toFix = balance.flatMap((b) =>
+      b.anomalies
+        .filter((a) => !dismissed.has(anomKey(a.row_id, b.column)))
+        .map((a) => ({ ...a, column: b.column, mean: b.mean }))
+    );
+    if (!toFix.length) return;
+    if (!confirm(`${toFix.length}건의 이상값을 모두 권장값(mean)으로 보정합니다.`)) return;
+    // 한 행에 여러 컬럼 이상값이 있을 수 있으므로 행별로 패치를 합쳐 한 번만 기록 (stale closure로 인한 덮어쓰기 방지)
+    const patches = new Map<string, Record<string, unknown>>();
+    for (const a of toFix) {
+      const base = patches.get(a.row_id) ?? rows.find((r) => r.id === a.row_id)?.data;
+      if (!base) continue;
+      patches.set(a.row_id, { ...base, [a.column]: Math.round(a.mean) });
+    }
+    for (const [id, data] of patches) {
+      await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, id, data }) });
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, data } : r)));
+    }
+    runBalance();
+  };
+
   // 차트 데이터 (선택한 Y 컬럼들을 X 기준 정렬해 라인 시리즈로)
   const numericCols = columns.filter((c) => c.type === "number");
   const chartRows = (() => {
@@ -209,7 +309,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           {/* 툴바 */}
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
             <Btn variant="primary" onClick={addRow}><Plus size={11} />행 추가</Btn>
-            <Btn disabled={!selectedRowId} onClick={deleteSelected}><Trash2 size={11} />삭제</Btn>
+            <Btn disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} />삭제</Btn>
+            {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6]">{selectedRowIds.size}행 선택됨</span>}
             <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
             <Btn onClick={() => fileRef.current?.click()}><Upload size={11} />임포트</Btn>
             <Btn onClick={async () => {
@@ -221,6 +322,20 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
               a.click();
             }}><Download size={11} />익스포트</Btn>
+            <Btn disabled={!selectedId} onClick={exportJson}><Download size={11} />JSON</Btn>
+            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
+            <Btn disabled={!selectedId} onClick={saveSnapshot}><Save size={11} />스냅샷</Btn>
+            {snapshots.length > 0 && (
+              <select
+                className="bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#6b6b77] outline-none"
+                defaultValue=""
+                onChange={(e) => { if (e.target.value) restoreSnapshot(e.target.value, snapshots.find((s) => s.id === e.target.value)?.name ?? ""); e.target.value = ""; }}
+              >
+                <option value="">복원...</option>
+                {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+            <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
             <Btn disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} />곡선 생성</Btn>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
@@ -233,9 +348,14 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             }} />
             <div className="w-px h-4 bg-[#2a2a2f] mx-0.5" />
             <Btn onClick={runBalance}><Sparkles size={11} />AI 분석</Btn>
-            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#2a2a2f] rounded-lg text-[11px] text-[#3a3a42] w-32 bg-[#16161a]">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              검색...
+            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#2a2a2f] rounded-lg text-[11px] w-40 bg-[#16161a] focus-within:border-[#7c3aed]/50">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#3a3a42] flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="검색..."
+                className="flex-1 min-w-0 bg-transparent outline-none text-[#ededed] placeholder:text-[#3a3a42]"
+              />
             </div>
           </div>
 
@@ -244,21 +364,56 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-[#16161a]">
-                  <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77] w-7 text-center"></th>
-                  {columns.map((c) => (
+                  <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77] w-7 text-center relative">
+                    <button
+                      onClick={() => setShowColToggle((v) => !v)}
+                      title="컬럼 표시/숨김"
+                      className="text-[#4a4a55] hover:text-[#ededed] align-middle"
+                    >
+                      {hiddenCols.size > 0 ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                    {showColToggle && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowColToggle(false)} />
+                        <div className="absolute left-0 top-full mt-1 z-20 w-40 bg-[#16161a] border border-[#2a2a2f] rounded-lg shadow-lg py-1 text-left">
+                          {columns.map((c) => {
+                            const isId = c.name === "id";
+                            const hidden = hiddenCols.has(c.name);
+                            return (
+                              <label key={c.id} className={`flex items-center gap-2 px-2.5 py-1 text-[11px] ${isId ? "text-[#4a4a55] cursor-default" : "text-[#ededed] cursor-pointer hover:bg-[#1e1e24]"}`}>
+                                <input
+                                  type="checkbox"
+                                  className="accent-[#7c3aed]"
+                                  checked={!hidden}
+                                  disabled={isId}
+                                  onChange={() => setHiddenCols((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(c.name)) next.delete(c.name); else next.add(c.name);
+                                    return next;
+                                  })}
+                                />
+                                {c.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </th>
+                  {visibleColumns.map((c) => (
                     <th key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-left text-[11px] font-medium text-[#6b6b77] whitespace-nowrap">{c.name}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
+                {filteredRows.map((row, idx) => (
                   <tr
                     key={row.id}
-                    onClick={() => setSelectedRowId(row.id)}
-                    className={`cursor-pointer ${selectedRowId === row.id ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
+                    onClick={(e) => handleRowClick(row.id, e)}
+                    className={`cursor-pointer ${selectedRowIds.has(row.id) ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
                   >
                     <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#4a4a55] text-[11px] text-center">{idx + 1}</td>
-                    {columns.map((c) => {
+                    {visibleColumns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
                       const isEditing = editing?.rowId === row.id && editing?.col === c.name;
                       return (
@@ -374,6 +529,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                 <Btn variant="primary" onClick={applyRecommended}>권장값 적용</Btn>
                 <Btn onClick={() => onNavigate?.("balance")}>상세 분석</Btn>
                 <Btn onClick={dismissTop}>무시</Btn>
+                {balance.length > 0 && balance.some((b) => b.anomalies.length > 0) && (
+                  <Btn onClick={applyAllAnomalies}>전체 보정</Btn>
+                )}
               </div>
             </>
           ) : (
@@ -409,7 +567,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e] flex-shrink-0" />
         <span>game-data-studio.db</span>
         <span className="text-[#2a2a2f]">·</span>
-        <span>{rows.length}행 {columns.length}컬럼</span>
+        <span>{rows.length}행 {columns.length}컬럼{searchQuery.trim() && ` (${filteredRows.length}건 표시)`}</span>
         <div className="ml-auto flex gap-3">
           {totalAnomalies > 0 && <span className="text-[#f87171]">이상값 {totalAnomalies}건</span>}
           {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}
