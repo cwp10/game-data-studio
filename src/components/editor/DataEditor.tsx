@@ -174,7 +174,7 @@ export function DataEditor({ projectId }: { projectId: string }) {
                       );
                     })}
                     <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-center">
-                      <button className="text-[#2a2a2f] hover:text-[#f87171] text-xs" onClick={() => delRow(row.id)}>🗑</button>
+                      <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delRow(row.id)}>×</button>
                     </td>
                   </tr>
                 ))}
@@ -185,40 +185,53 @@ export function DataEditor({ projectId }: { projectId: string }) {
       </div>
 
       {/* 하단 AI 패널 */}
-      <div className="h-[160px] border-t border-[#2a2a2f] flex flex-shrink-0">
-        <div className="flex-1 p-3 border-r border-[#2a2a2f]">
-          <div className="text-[11px] font-medium text-[#9a9aa3] mb-2">✦ AI 밸런싱 분석</div>
+      <div className="h-[148px] border-t border-[#2a2a2f] flex flex-shrink-0 bg-[#16161a]">
+        <div className="flex-1 px-4 py-3 border-r border-[#2a2a2f]">
+          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">AI 밸런싱 분석</div>
           {activeResult ? (
-            <div className="bg-[#16161a] rounded-md p-2.5 text-xs leading-relaxed text-[#ededed]">
-              <span className="font-medium">{activeResult.column}</span> — 평균 <span className="font-medium">{activeResult.mean.toFixed(0)}</span>, 표준편차 ±{activeResult.stddev.toFixed(0)}
+            <div className="bg-[#0f0f10] rounded-lg p-3 text-xs leading-relaxed text-[#ededed] border border-[#2a2a2f]">
+              <span className="font-semibold text-[#8b5cf6]">{activeResult.column}</span>
+              <span className="text-[#6b6b77]"> — 평균 </span>
+              <span className="font-medium">{activeResult.mean.toFixed(0)}</span>
+              <span className="text-[#6b6b77]">, 표준편차 ±{activeResult.stddev.toFixed(0)}</span>
               {activeResult.anomalies.length > 0 && (
-                <div className="mt-1 text-[#f87171]">이상값 {activeResult.anomalies.length}건 감지됨</div>
+                <span className="ml-2 text-[#f87171] text-[11px]">이상값 {activeResult.anomalies.length}건</span>
               )}
             </div>
           ) : (
-            <div className="bg-[#16161a] rounded-md p-2.5 text-xs text-[#9a9aa3]">AI 분석 버튼을 클릭하면 이상값을 분석합니다.</div>
+            <div className="bg-[#0f0f10] rounded-lg p-3 text-xs text-[#4a4a55] border border-[#2a2a2f]">✦ AI 분석 버튼을 클릭하면 이상값을 분석합니다.</div>
           )}
         </div>
-        <div className="w-[200px] p-3 flex-shrink-0">
-          <div className="text-[11px] font-medium text-[#9a9aa3] mb-2">통계</div>
+        <div className="w-[190px] px-4 py-3 flex-shrink-0">
+          <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">통계</div>
           {activeResult ? (
-            <>
-              <div className="flex justify-between text-[11px] py-0.5 border-b border-[#2a2a2f]"><span className="text-[#6b6b77]">평균</span><span className="font-medium text-[#ededed]">{activeResult.mean.toFixed(0)}</span></div>
-              <div className="flex justify-between text-[11px] py-0.5 border-b border-[#2a2a2f]"><span className="text-[#6b6b77]">표준편차</span><span className="font-medium text-[#ededed]">±{activeResult.stddev.toFixed(0)}</span></div>
-              <div className="flex justify-between text-[11px] py-0.5 border-b border-[#2a2a2f]"><span className="text-[#6b6b77]">이상값</span><span className={`font-medium ${totalAnomalies > 0 ? "text-[#f87171]" : "text-[#ededed]"}`}>{totalAnomalies}건</span></div>
-              <div className="flex justify-between text-[11px] py-0.5"><span className="text-[#6b6b77]">경고</span><span className={`font-medium ${totalWarns > 0 ? "text-[#f59e0b]" : "text-[#ededed]"}`}>{totalWarns}건</span></div>
-            </>
-          ) : <div className="text-[11px] text-[#4a4a55]">데이터 없음</div>}
+            <div className="space-y-1">
+              {[
+                { label: "평균", value: activeResult.mean.toFixed(0), cls: "" },
+                { label: "표준편차", value: `±${activeResult.stddev.toFixed(0)}`, cls: "" },
+                { label: "이상값", value: `${totalAnomalies}건`, cls: totalAnomalies > 0 ? "text-[#f87171]" : "" },
+                { label: "경고", value: `${totalWarns}건`, cls: totalWarns > 0 ? "text-[#f59e0b]" : "" },
+              ].map((s) => (
+                <div key={s.label} className="flex justify-between text-[11px]">
+                  <span className="text-[#4a4a55]">{s.label}</span>
+                  <span className={`font-medium text-[#9a9aa3] ${s.cls}`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div className="text-[11px] text-[#3a3a42]">데이터 없음</div>}
         </div>
       </div>
 
       {/* 상태바 */}
-      <div className="h-6 bg-[#16161a] border-t border-[#2a2a2f] flex items-center px-3 gap-3.5 text-[11px] text-[#4a4a55] flex-shrink-0">
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+      <div className="h-6 bg-[#0f0f10] border-t border-[#2a2a2f] flex items-center px-4 gap-3 text-[10px] text-[#3a3a42] flex-shrink-0">
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e] flex-shrink-0" />
         <span>game-data-studio.db</span>
-        <span>{rows.length}행 · {columns.length}컬럼</span>
-        <span className="ml-auto text-[#f87171]">{totalAnomalies > 0 ? `이상값 ${totalAnomalies}건` : ""}</span>
-        {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}
+        <span className="text-[#2a2a2f]">·</span>
+        <span>{rows.length}행 {columns.length}컬럼</span>
+        <div className="ml-auto flex gap-3">
+          {totalAnomalies > 0 && <span className="text-[#f87171]">이상값 {totalAnomalies}건</span>}
+          {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}
+        </div>
       </div>
     </div>
   );

@@ -40,7 +40,7 @@ export function TypeBadge({ type }: { type: "string" | "number" | "boolean" }) {
 
 export function PanelHeader({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`px-3 py-2.5 border-b border-[#2a2a2f] flex items-center justify-between text-[11px] font-medium text-[#6b6b77] uppercase tracking-wide bg-[#16161a] ${className}`}>
+    <div className={`px-3.5 py-2.5 border-b border-[#2a2a2f] flex items-center justify-between text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest ${className}`}>
       {children}
     </div>
   );
@@ -50,7 +50,7 @@ export function PanelItem({ active, children, onClick, className = "" }: { activ
   return (
     <div
       onClick={onClick}
-      className={`px-3 py-2 text-xs cursor-pointer border-l-2 flex items-center gap-2 ${active ? "bg-[#1e1e24] text-[#ededed] border-[#8b5cf6] font-medium" : "text-[#9a9aa3] border-transparent hover:bg-[#1e1e24]"} ${className}`}
+      className={`px-3.5 py-2.5 text-xs cursor-pointer border-l-2 flex items-center gap-2 transition-colors ${active ? "bg-[#1e1e24] text-[#ededed] border-[#8b5cf6] font-medium" : "text-[#6b6b77] border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3]"} ${className}`}
     >
       {children}
     </div>
@@ -59,15 +59,15 @@ export function PanelItem({ active, children, onClick, className = "" }: { activ
 
 export function ContentHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="px-3.5 py-2.5 border-b border-[#2a2a2f] flex items-center justify-between flex-shrink-0">
-      <span className="text-sm font-medium text-[#ededed]">{title}</span>
+    <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between flex-shrink-0">
+      <span className="text-[13px] font-semibold text-[#ededed]">{title}</span>
       <div className="flex gap-1.5">{children}</div>
     </div>
   );
 }
 
 export function SectionLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`text-[11px] font-medium text-[#6b6b77] uppercase tracking-wide mb-2 mt-4 first:mt-0 ${className}`}>{children}</div>;
+  return <div className={`text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2.5 mt-5 first:mt-0 ${className}`}>{children}</div>;
 }
 
 export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
@@ -99,11 +99,11 @@ export function PillTab({ tabs, active, onChange }: { tabs: { id: string; label:
 }
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className="w-full px-3 py-2 border border-[#3a3a42] rounded-md text-xs focus:outline-none focus:border-[#8b5cf6] bg-[#16161a] text-[#ededed]" {...props} />;
+  return <input className="w-full px-3 py-2.5 border border-[#2a2a2f] rounded-lg text-xs focus:outline-none focus:border-[#7c3aed] focus:ring-1 focus:ring-[#7c3aed]/30 bg-[#0f0f10] text-[#ededed] placeholder:text-[#4a4a55] transition-colors" {...props} />;
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className="w-full px-3 py-2 border border-[#3a3a42] rounded-md text-xs focus:outline-none focus:border-[#8b5cf6] bg-[#16161a] text-[#ededed]" {...props} />;
+  return <select className="w-full px-3 py-2.5 border border-[#2a2a2f] rounded-lg text-xs focus:outline-none focus:border-[#7c3aed] bg-[#0f0f10] text-[#ededed] transition-colors" {...props} />;
 }
 
 const GRADE_STYLES: Record<string, string> = {

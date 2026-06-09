@@ -91,7 +91,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           {tables.map((t) => (
             <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)}>
               <span className="flex-1 truncate">{t.name}</span>
-              <span className="ml-auto text-[10px] text-[#4a4a55]">{columns.length || ""}</span>
+              <span className="ml-auto text-[10px] text-[#3a3a42]">{columns.length || ""}</span>
             </PanelItem>
           ))}
         </div>
@@ -125,7 +125,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
                   </td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77]">{c.description}</td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-center">
-                    <button className="text-[#2a2a2f] hover:text-[#f87171]" onClick={() => delCol(c.id)}>🗑</button>
+                    <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delCol(c.id)}>×</button>
                   </td>
                 </tr>
               ))}

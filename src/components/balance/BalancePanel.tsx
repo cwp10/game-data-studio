@@ -38,7 +38,7 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
   const score = anomalyCount === 0 ? 100 : Math.max(0, Math.round(100 - anomalyCount * 5));
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex-1 overflow-auto p-6">
       <SectionLabel>전체 현황</SectionLabel>
       <div className="grid grid-cols-4 gap-2.5 mb-4">
         {[
@@ -58,23 +58,24 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
         <SectionLabel className="mb-0 mt-0">이상값 목록</SectionLabel>
         <Btn variant="primary" onClick={runAll} disabled={loading}>{loading ? "분석 중..." : "✦ 전체 AI 분석"}</Btn>
       </div>
-      <div className="border border-[#2a2a2f] rounded-lg overflow-hidden mb-4">
-        <div className="px-3.5 py-2.5 border-b border-[#2a2a2f] bg-[#16161a] flex items-center justify-between">
-          <span className="text-sm font-medium">감지된 이상값 {dangers.length + warns.length}건</span>
+      <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl overflow-hidden mb-6">
+        <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between">
+          <span className="text-[12px] font-semibold text-[#ededed]">이상값 목록</span>
+          <span className="text-[11px] text-[#4a4a55]">{dangers.length + warns.length}건 감지</span>
         </div>
         {[...dangers.map((a) => ({ ...a, sev: "danger" as const })), ...warns.map((a) => ({ ...a, sev: "warn" as const }))].map((a, i) => (
-          <div key={i} className="px-3.5 py-2.5 border-b border-[#2a2a2f] last:border-0 flex items-center gap-2.5">
-            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.sev === "danger" ? "bg-[#E24B4A]" : "bg-[#EF9F27]"}`} />
-            <div className="flex-1">
+          <div key={i} className="px-4 py-3 border-b border-[#2a2a2f] last:border-0 flex items-center gap-3">
+            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.sev === "danger" ? "bg-[#ef4444]" : "bg-[#f59e0b]"}`} />
+            <div className="flex-1 min-w-0">
               <div className="text-xs font-medium text-[#ededed]">{a.column}</div>
-              <div className="text-[11px] text-[#6b6b77]">평균({a.mean.toFixed(0)})의 {(a.value / a.mean).toFixed(1)}배</div>
+              <div className="text-[11px] text-[#6b6b77]">평균 {a.mean.toFixed(0)} 대비 {(a.value / a.mean).toFixed(1)}배</div>
             </div>
-            <span className={`text-xs font-medium ${a.sev === "danger" ? "text-[#f87171]" : "text-[#f59e0b]"}`}>{a.value}</span>
+            <span className={`text-xs font-semibold ${a.sev === "danger" ? "text-[#f87171]" : "text-[#f59e0b]"}`}>{a.value.toLocaleString()}</span>
             <Btn className="text-[11px] py-0.5 px-2" onClick={() => onNavigate?.("editor")}>수정</Btn>
           </div>
         ))}
         {dangers.length + warns.length === 0 && (
-          <div className="px-3.5 py-4 text-[11px] text-[#4a4a55] text-center">이상값이 없습니다. AI 분석을 실행하세요.</div>
+          <div className="px-4 py-6 text-[11px] text-[#3a3a42] text-center">이상값이 없습니다 — AI 분석을 실행하세요.</div>
         )}
       </div>
 
