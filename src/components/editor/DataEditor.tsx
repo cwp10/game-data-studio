@@ -3,11 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
 import { type Screen } from "@/app/page";
 
+const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
+
 interface Table { id: string; name: string; }
-interface Column { id: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
+interface Column { id: string; table_id?: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
 interface Row { id: string; data: Record<string, unknown>; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
@@ -24,7 +27,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [editVal, setEditVal] = useState("");
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [bottomTab, setBottomTab] = useState<"chat" | "balance">("chat");
+  const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
+  const [chartX, setChartX] = useState("");
+  const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
   const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -39,6 +44,18 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
   useEffect(() => { if (selectedId) loadData(selectedId); }, [selectedId]);
+
+  // 차트 기본 축: 테이블이 바뀔 때 1회 초기화 (level 우선). 같은 테이블 내 편집 시엔 사용자 선택 보존.
+  const chartTableRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId || columns.length === 0 || chartTableRef.current === selectedId) return;
+    if (columns[0].table_id && columns[0].table_id !== selectedId) return; // 아직 이전 테이블 컬럼
+    chartTableRef.current = selectedId;
+    const nums = columns.filter((c) => c.type === "number").map((c) => c.name);
+    const x = columns.find((c) => c.name === "level")?.name ?? columns.find((c) => c.name === "id")?.name ?? columns[0]?.name ?? "";
+    setChartX(x);
+    setChartY(nums.filter((c) => c !== x).slice(0, 2));
+  }, [selectedId, columns]);
 
   const addRow = async () => {
     if (!selectedId) return;
@@ -147,6 +164,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     loadData(selectedId);
     runBalance();
   };
+
+  // 차트 데이터 (선택한 Y 컬럼들을 X 기준 정렬해 라인 시리즈로)
+  const numericCols = columns.filter((c) => c.type === "number");
+  const chartRows = (() => {
+    const xNum = columns.find((c) => c.name === chartX)?.type === "number";
+    const rs = [...rows];
+    if (xNum) rs.sort((a, b) => Number(a.data[chartX]) - Number(b.data[chartX]));
+    return rs;
+  })();
+  const chartSeries = chartY.map((name, i) => ({ name, color: CHART_PALETTE[i % CHART_PALETTE.length], values: chartRows.map((r) => Number(r.data[name])) }));
+  const chartXLabels = chartRows.map((r) => String(r.data[chartX] ?? ""));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -257,14 +285,41 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         </div>
       </div>
 
-      {/* 하단 탭 패널: 대화 | 밸런싱 분석 */}
+      {/* 하단 탭 패널: 대화 | 밸런싱 분석 | 차트 */}
       <div className="h-[300px] border-t border-[#2a2a2f] flex flex-col flex-shrink-0 bg-[#16161a]">
         <div className="flex items-center px-2 border-b border-[#2a2a2f] flex-shrink-0">
           <BottomTab active={bottomTab === "chat"} onClick={() => setBottomTab("chat")}><MessageSquare size={12} />대화</BottomTab>
           <BottomTab active={bottomTab === "balance"} onClick={() => setBottomTab("balance")}><BarChart3 size={12} />밸런싱 분석</BottomTab>
+          <BottomTab active={bottomTab === "chart"} onClick={() => setBottomTab("chart")}><TrendingUp size={12} />차트</BottomTab>
         </div>
 
-        {bottomTab === "chat" ? (
+        {bottomTab === "chart" ? (
+          <div className="flex-1 overflow-auto p-3">
+            {numericCols.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-[12px] text-[#4a4a55]">숫자 컬럼이 없습니다.</div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-2 flex-wrap text-[11px]">
+                  <span className="text-[10px] text-[#6b6b77]">X축</span>
+                  <select value={chartX} onChange={(e) => setChartX(e.target.value)} className="bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-[#ededed] outline-none">
+                    {columns.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                  <span className="text-[10px] text-[#6b6b77] ml-2">Y축</span>
+                  {numericCols.map((c) => (
+                    <label key={c.id} className="flex items-center gap-1 cursor-pointer text-[#9a9aa3]">
+                      <input type="checkbox" className="accent-[#7c3aed]" checked={chartY.includes(c.name)}
+                        onChange={(e) => setChartY((prev) => e.target.checked ? [...prev, c.name] : prev.filter((y) => y !== c.name))} />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+                {chartY.length > 0
+                  ? <LineChart series={chartSeries} xLabels={chartXLabels} height={195} />
+                  : <div className="flex items-center justify-center h-[180px] text-[12px] text-[#4a4a55]">Y축 컬럼을 1개 이상 선택하세요</div>}
+              </>
+            )}
+          </div>
+        ) : bottomTab === "chat" ? (
           <div className="flex-1 overflow-hidden">
             <ChatPanel
               projectId={projectId}
