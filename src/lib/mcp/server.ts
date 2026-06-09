@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createProject, deleteProject, listProjects } from "../db/repo/projects.js";
-import { addColumn, listColumns, removeColumn, countColumnsUsingEnum } from "../db/repo/columns.js";
+import { addColumn, listColumns, removeColumn, countColumnsUsingEnum, updateColumn } from "../db/repo/columns.js";
 import { listEnumTypes, createEnumType, updateEnumType, deleteEnumType } from "../db/repo/enumTypes.js";
 import { createTable, deleteTable, getTable, listTables } from "../db/repo/tables.js";
 import { deleteRow, readRows, upsertRow } from "../db/repo/rows.js";
@@ -81,6 +81,13 @@ server.tool(
     const existing = listColumns(table_id);
     return ok(addColumn({ table_id, name, type, description, enum_type_id, order_index: existing.length }));
   }
+);
+
+server.tool(
+  "update_column",
+  "컬럼 수정. 이름 변경 시 모든 행의 데이터 키도 함께 변경됨. type='enum'이면 enum_type_id 필요",
+  { column_id: z.string(), name: z.string().optional(), type: z.enum(["string", "number", "boolean", "enum"]).optional(), enum_type_id: z.string().optional(), description: z.string().optional() },
+  async ({ column_id, name, type, enum_type_id, description }) => ok(updateColumn(column_id, { name, type, enum_type_id, description }))
 );
 
 server.tool(

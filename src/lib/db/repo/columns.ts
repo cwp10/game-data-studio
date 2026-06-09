@@ -76,6 +76,58 @@ export function countColumnsUsingEnum(enumTypeId: string): number {
   return (getDb().prepare("SELECT COUNT(*) as n FROM columns WHERE enum_type_id = ?").get(enumTypeId) as { n: number }).n;
 }
 
+// 컬럼 메타 수정. 이름 변경 시 해당 테이블 모든 행의 data 키도 함께 변경한다.
+// 타입 변경은 메타데이터만 바꾸며 기존 값은 보존한다(강제 변환하지 않음).
+export function updateColumn(
+  id: string,
+  patch: { name?: string; type?: Column["type"]; enum_type_id?: string | null; description?: string | null }
+): Column {
+  ensure();
+  const db = getDb();
+  const cur = db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as Column | undefined;
+  if (!cur) throw new Error("컬럼을 찾을 수 없습니다.");
+
+  const newName = patch.name?.trim() || cur.name;
+  if (newName !== cur.name) {
+    const dup = db.prepare("SELECT id FROM columns WHERE table_id = ? AND name = ? AND id != ?").get(cur.table_id, newName, id);
+    if (dup) throw new Error(`이미 '${newName}' 컬럼이 존재합니다.`);
+  }
+  const newType = patch.type ?? cur.type;
+  const newEnumTypeId = newType === "enum" ? (patch.enum_type_id ?? cur.enum_type_id ?? null) : null;
+  const newDesc = patch.description !== undefined ? patch.description : cur.description;
+
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE columns SET name = ?, type = ?, enum_type_id = ?, description = ? WHERE id = ?")
+      .run(newName, newType, newEnumTypeId, newDesc, id);
+    if (newName !== cur.name) {
+      const rows = db.prepare("SELECT id, data FROM rows WHERE table_id = ?").all(cur.table_id) as { id: string; data: string }[];
+      const upd = db.prepare("UPDATE rows SET data = ?, updated_at = ? WHERE id = ?");
+      const now = Date.now();
+      for (const r of rows) {
+        const d = JSON.parse(r.data) as Record<string, unknown>;
+        if (Object.prototype.hasOwnProperty.call(d, cur.name)) {
+          d[newName] = d[cur.name];
+          delete d[cur.name];
+          upd.run(JSON.stringify(d), now, r.id);
+        }
+      }
+    }
+  });
+  tx();
+  return db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as Column;
+}
+
+// 주어진 순서대로 order_index 재부여
+export function reorderColumns(tableId: string, orderedIds: string[]): void {
+  ensure();
+  const db = getDb();
+  const upd = db.prepare("UPDATE columns SET order_index = ? WHERE id = ? AND table_id = ?");
+  const tx = db.transaction(() => {
+    orderedIds.forEach((id, i) => upd.run(i, id, tableId));
+  });
+  tx();
+}
+
 export function removeColumn(id: string): void {
   getDb().prepare("DELETE FROM columns WHERE id = ?").run(id);
 }

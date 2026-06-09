@@ -31,7 +31,7 @@ const tool = (name: string) => `mcp__${SERVER}__${name}`;
 // 채팅에서 허용하는 MCP 툴 (스키마 + 데이터 범위)
 const ALLOWED_TOOLS = [
   "list_projects", "list_tables", "list_relations", "read_rows", "analyze_balance",
-  "create_table", "add_column", "remove_column", "set_relation",
+  "create_table", "add_column", "update_column", "remove_column", "set_relation",
   "upsert_row", "delete_row", "import_csv", "export_csv",
   "list_enum_types", "create_enum_type", "update_enum_type", "delete_enum_type",
   "get_project_memory", "update_project_memory",

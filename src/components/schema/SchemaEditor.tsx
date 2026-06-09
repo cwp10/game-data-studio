@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus, Link2, FileText, Lock, MessageSquare } from "lucide-react";
+import { Plus, Link2, FileText, Lock, MessageSquare, Pencil, ChevronUp, ChevronDown } from "lucide-react";
 import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge, PkBadge, BottomTab } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 
@@ -18,7 +18,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [showTableModal, setShowTableModal] = useState(false);
   const [showColModal, setShowColModal] = useState(false);
   const [tableForm, setTableForm] = useState({ name: "", description: "" });
-  const [colForm, setColForm] = useState({ name: "", type: "string" as Column["type"], description: "", enum_type_id: "" });
+  const [colForm, setColForm] = useState<{ id?: string; name: string; type: Column["type"]; description: string; enum_type_id: string }>({ name: "", type: "string", description: "", enum_type_id: "" });
   const [showRelModal, setShowRelModal] = useState(false);
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
@@ -49,17 +49,17 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
     loadTables();
   };
 
-  const addCol = async () => {
+  const openNewCol = () => { setColForm({ name: "", type: "string", description: "", enum_type_id: "" }); setShowColModal(true); };
+  const openEditCol = (c: Column) => { setColForm({ id: c.id, name: c.name, type: c.type, description: c.description ?? "", enum_type_id: c.enum_type_id ?? "" }); setShowColModal(true); };
+
+  const saveCol = async () => {
     if (!selectedId || !colForm.name.trim()) return;
     if (colForm.type === "enum" && !colForm.enum_type_id) return; // enum이면 타입 선택 필수
-    const payload = {
-      table_id: selectedId,
-      name: colForm.name,
-      type: colForm.type,
-      description: colForm.description,
-      enum_type_id: colForm.type === "enum" ? colForm.enum_type_id : null,
-    };
-    await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const enum_type_id = colForm.type === "enum" ? colForm.enum_type_id : null;
+    const res = colForm.id
+      ? await fetch("/api/columns", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column_id: colForm.id, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id }) })
+      : await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id }) });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? "저장에 실패했습니다."); return; }
     setShowColModal(false);
     setColForm({ name: "", type: "string", description: "", enum_type_id: "" });
     loadColumns(selectedId);
@@ -68,6 +68,16 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const delCol = async (id: string) => {
     await fetch("/api/columns", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column_id: id }) });
     if (selectedId) loadColumns(selectedId);
+  };
+
+  const moveCol = async (index: number, dir: -1 | 1) => {
+    if (!selectedId) return;
+    const target = index + dir;
+    if (target < 0 || target >= columns.length) return;
+    const ids = columns.map((c) => c.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await fetch("/api/columns", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reorder", table_id: selectedId, ordered_ids: ids }) });
+    loadColumns(selectedId);
   };
 
   const createRelation = async () => {
@@ -124,7 +134,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
             a.download = (selectedTable?.name ?? "export") + ".csv";
             a.click();
           }}><FileText size={11} />CSV</Btn>
-          <Btn variant="primary" onClick={() => setShowColModal(true)}><Plus size={11} />컬럼 추가</Btn>
+          <Btn variant="primary" onClick={openNewCol}><Plus size={11} />컬럼 추가</Btn>
         </ContentHeader>
 
         <div className="flex-1 overflow-auto">
@@ -135,14 +145,14 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
                 <th className="text-left px-2.5 py-1.5 text-[11px] font-medium text-[#6b6b77] border-b border-[#2a2a2f] w-[80px]">타입</th>
                 <th className="text-left px-2.5 py-1.5 text-[11px] font-medium text-[#6b6b77] border-b border-[#2a2a2f] w-[130px]">참조</th>
                 <th className="text-left px-2.5 py-1.5 text-[11px] font-medium text-[#6b6b77] border-b border-[#2a2a2f]">설명</th>
-                <th className="px-2.5 py-1.5 border-b border-[#2a2a2f] w-10"></th>
+                <th className="px-2.5 py-1.5 border-b border-[#2a2a2f] w-28"></th>
               </tr>
             </thead>
             <tbody>
-              {columns.map((c) => {
+              {columns.map((c, idx) => {
                 const isPk = c.name === "id";
                 return (
-                <tr key={c.id} className="hover:bg-[#1e1e24]">
+                <tr key={c.id} className="group hover:bg-[#1e1e24]">
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#ededed]">{c.name}{isPk && <PkBadge />}</td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f]">
                     <TypeBadge type={c.type} />
@@ -152,18 +162,24 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
                     {(() => { const ref = getColumnRef(c.name); return ref ? <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-[#3d0a1e] text-[#f9a8d4]">→ {ref}</span> : <span className="text-[#2a2a2f]">—</span>; })()}
                   </td>
                   <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77]">{c.description}</td>
-                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-center">
-                    {isPk
-                      ? <Lock size={11} className="inline text-[#3a3a42]" />
-                      : <button className="text-[11px] text-[#3a3a42] hover:text-[#f87171] px-1 transition-colors" onClick={() => delCol(c.id)}>×</button>
-                    }
+                  <td className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-right whitespace-nowrap">
+                    {isPk ? (
+                      <Lock size={11} className="inline text-[#3a3a42]" />
+                    ) : (
+                      <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button title="위로" disabled={idx === 0} className="text-[#4a4a55] hover:text-[#ededed] disabled:opacity-20 p-0.5" onClick={() => moveCol(idx, -1)}><ChevronUp size={13} /></button>
+                        <button title="아래로" disabled={idx === columns.length - 1} className="text-[#4a4a55] hover:text-[#ededed] disabled:opacity-20 p-0.5" onClick={() => moveCol(idx, 1)}><ChevronDown size={13} /></button>
+                        <button title="편집" className="text-[#6b6b77] hover:text-[#ededed] p-0.5" onClick={() => openEditCol(c)}><Pencil size={11} /></button>
+                        <button title="삭제" className="text-[#6b6b77] hover:text-[#f87171] p-0.5" onClick={() => delCol(c.id)}>×</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
                 );
               })}
               {selectedId && (
                 <tr>
-                  <td colSpan={5} className="text-center text-[#4a4a55] py-2.5 text-[11px] cursor-pointer hover:bg-[#1e1e24]" onClick={() => setShowColModal(true)}>
+                  <td colSpan={5} className="text-center text-[#4a4a55] py-2.5 text-[11px] cursor-pointer hover:bg-[#1e1e24]" onClick={openNewCol}>
                     ＋ 컬럼 추가
                   </td>
                 </tr>
@@ -225,11 +241,12 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
         </div>
       </Modal>
 
-      <Modal open={showColModal} onClose={() => setShowColModal(false)} title="컬럼 추가">
+      <Modal open={showColModal} onClose={() => setShowColModal(false)} title={colForm.id ? "컬럼 편집" : "컬럼 추가"}>
         <div className="space-y-3">
           <div>
             <div className="text-[11px] text-[#9a9aa3] mb-1">컬럼명 *</div>
             <Input placeholder="예: atk" value={colForm.name} onChange={(e) => setColForm({ ...colForm, name: e.target.value })} />
+            {colForm.id && <div className="text-[10px] text-[#4a4a55] mt-1">이름을 바꾸면 모든 행의 데이터 키도 함께 변경됩니다.</div>}
           </div>
           <div>
             <div className="text-[11px] text-[#9a9aa3] mb-1">타입</div>
@@ -259,7 +276,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Btn onClick={() => setShowColModal(false)}>취소</Btn>
-            <Btn variant="primary" onClick={addCol}>추가</Btn>
+            <Btn variant="primary" onClick={saveCol}>{colForm.id ? "저장" : "추가"}</Btn>
           </div>
         </div>
       </Modal>
