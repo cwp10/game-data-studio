@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText, Tags, Coins, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { type Screen } from "@/app/page";
 
@@ -15,7 +15,8 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
 ];
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
-  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && localStorage.getItem("sidebar:collapsed") === "1");
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { if (localStorage.getItem("sidebar:collapsed") === "1") setCollapsed(true); }, []);
 
   return (
     <div className={`${collapsed ? "w-[52px]" : "w-[168px]"} bg-[#16161a] border-r border-[#2a2a2f] flex flex-col flex-shrink-0 transition-[width] duration-150`}>
