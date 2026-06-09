@@ -8,3 +8,4 @@ data/*.db-wal
 .env.local
 .DS_Store
 dist/
+tsconfig.tsbuildinfo
