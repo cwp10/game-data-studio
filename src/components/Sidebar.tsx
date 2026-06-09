@@ -15,7 +15,7 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
 ];
 
 export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar:collapsed") === "1");
 
   return (
     <div className={`${collapsed ? "w-[52px]" : "w-[168px]"} bg-[#16161a] border-r border-[#2a2a2f] flex flex-col flex-shrink-0 transition-[width] duration-150`}>
@@ -23,7 +23,7 @@ export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: 
       <div className={`flex items-center px-2 pt-2 pb-1 ${collapsed ? "justify-center" : "justify-between"}`}>
         {!collapsed && <span className="text-[12px] font-semibold text-[#ededed] pl-1.5 truncate">Game Data Studio</span>}
         <button
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => setCollapsed((v) => { localStorage.setItem("sidebar:collapsed", v ? "0" : "1"); return !v; })}
           title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}
           className="flex-shrink-0 text-[#6b6b77] hover:text-[#ededed] hover:bg-[#1a1a1c] rounded-md p-1.5 transition-colors"
         >
