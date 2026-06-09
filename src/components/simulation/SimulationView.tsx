@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { RotateCcw, Copy, Sparkles, Save, Plus } from "lucide-react";
 import { Btn, ContentHeader, CsCodeBlock, PanelHeader, SectionLabel } from "@/components/ui";
 
 interface Table { id: string; name: string; }
@@ -87,7 +88,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
       <div className="w-[200px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
         <PanelHeader>
           시뮬레이션
-          <button className="text-sm font-normal cursor-pointer text-[#6b6b77] hover:text-[#ededed]" onClick={() => setSelectedSimId(null)}>＋</button>
+          <button className="text-[#6b6b77] hover:text-[#ededed] transition-colors" onClick={() => setSelectedSimId(null)}><Plus size={13} /></button>
         </PanelHeader>
         <div className="overflow-auto flex-1">
           {simulations.map((s) => (
@@ -109,8 +110,8 @@ export function SimulationView({ projectId }: { projectId: string }) {
       {/* 메인 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedSim?.name ?? "새 시뮬레이션"}>
-          <Btn onClick={() => setSelectedSimId(null)}>↺ 재실행</Btn>
-          <Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}>⎘ C# 복사</Btn>
+          <Btn onClick={() => setSelectedSimId(null)}><RotateCcw size={11} />재실행</Btn>
+          <Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}><Copy size={11} />C# 복사</Btn>
         </ContentHeader>
 
         <div className="flex-1 overflow-auto p-5">
@@ -153,7 +154,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
                   </>
                 )}
                 <Btn variant="primary" onClick={runSim} disabled={loading || selectedTables.length === 0}>
-                  {loading ? "로딩 중..." : "✦ AI 수식 도출"}
+                  <Sparkles size={11} />{loading ? "로딩 중..." : "AI 수식 도출"}
                 </Btn>
               </div>
             </>
@@ -177,7 +178,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
 
           {snapshot && (
             <div className="mt-3 flex gap-2">
-              <Btn variant="primary" onClick={saveSim}>💾 저장</Btn>
+              <Btn variant="primary" onClick={saveSim}><Save size={11} />저장</Btn>
             </div>
           )}
         </div>

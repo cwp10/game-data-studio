@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { Btn, Modal, Input, Select, SectionLabel } from "@/components/ui";
 import { type Screen } from "@/app/page";
 
@@ -53,7 +54,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
           <div className="text-[15px] font-semibold text-[#ededed]">프로젝트</div>
           <div className="text-[11px] text-[#4a4a55] mt-0.5">{projects.length}개의 프로젝트</div>
         </div>
-        <Btn variant="primary" onClick={() => setShowModal(true)}>＋ 새 프로젝트</Btn>
+        <Btn variant="primary" onClick={() => setShowModal(true)}><Plus size={11} />새 프로젝트</Btn>
       </div>
 
       <div className="p-6">
@@ -63,7 +64,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
             <div className="text-5xl mb-4">🎮</div>
             <div className="text-[15px] font-medium text-[#ededed] mb-2">첫 번째 프로젝트를 만들어보세요</div>
             <div className="text-[12px] text-[#4a4a55] mb-6">장르에 맞는 스키마와 데이터를 자동으로 구성합니다</div>
-            <Btn variant="primary" onClick={() => setShowModal(true)}>＋ 새 프로젝트 만들기</Btn>
+            <Btn variant="primary" onClick={() => setShowModal(true)}><Plus size={11} />새 프로젝트 만들기</Btn>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Plus, Link2 } from "lucide-react";
 import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeBadge } from "@/components/ui";
 
 interface Table { id: string; name: string; description: string | null; }
@@ -85,7 +86,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
       <div className="w-[170px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
         <PanelHeader>
           테이블
-          <button className="text-sm font-normal cursor-pointer text-[#6b6b77] hover:text-[#ededed]" onClick={() => setShowTableModal(true)}>＋</button>
+          <button className="text-[#6b6b77] hover:text-[#ededed] transition-colors" onClick={() => setShowTableModal(true)}><Plus size={13} /></button>
         </PanelHeader>
         <div className="overflow-auto flex-1">
           {tables.map((t) => (
@@ -100,8 +101,8 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
       {/* 메인: 컬럼 목록 */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <ContentHeader title={selectedTable?.name ?? "테이블 선택"}>
-          <Btn onClick={() => setShowRelModal(true)}>관계 설정</Btn>
-          <Btn variant="primary" onClick={() => setShowColModal(true)}>＋ 컬럼 추가</Btn>
+          <Btn onClick={() => setShowRelModal(true)}><Link2 size={11} />관계 설정</Btn>
+          <Btn variant="primary" onClick={() => setShowColModal(true)}><Plus size={11} />컬럼 추가</Btn>
         </ContentHeader>
 
         <div className="flex-1 overflow-auto">

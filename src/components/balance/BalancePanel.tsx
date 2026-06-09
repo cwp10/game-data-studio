@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { Btn, SectionLabel } from "@/components/ui";
 
 interface Table { id: string; name: string; }
@@ -56,7 +57,7 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
 
       <div className="flex items-center justify-between mb-2">
         <SectionLabel className="mb-0 mt-0">이상값 목록</SectionLabel>
-        <Btn variant="primary" onClick={runAll} disabled={loading}>{loading ? "분석 중..." : "✦ 전체 AI 분석"}</Btn>
+        <Btn variant="primary" onClick={runAll} disabled={loading}><Sparkles size={11} />{loading ? "분석 중..." : "AI 분석"}</Btn>
       </div>
       <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl overflow-hidden mb-6">
         <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between">
