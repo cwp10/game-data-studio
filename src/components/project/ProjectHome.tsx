@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { Btn, Modal, Input, Select, SectionLabel } from "@/components/ui";
+import { Btn, SectionLabel } from "@/components/ui";
+import { ProjectWizard } from "@/components/project/ProjectWizard";
 import { type Screen } from "@/app/page";
 
 interface Project {
@@ -15,23 +16,12 @@ interface Project {
   updated_at: number;
 }
 
-const GENRES = ["수집형 RPG", "방치형 RPG", "전략", "퍼즐", "기타"];
-
 export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, projectId?: string, projectName?: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: "", genre: "", description: "" });
+  const [showWizard, setShowWizard] = useState(false);
 
   const load = () => fetch("/api/projects").then((r) => r.json()).then(setProjects);
   useEffect(() => { load(); }, []);
-
-  const create = async () => {
-    if (!form.name.trim()) return;
-    await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-    setShowModal(false);
-    setForm({ name: "", genre: "", description: "" });
-    load();
-  };
 
   const del = async (id: string) => {
     if (!confirm("프로젝트와 모든 하위 데이터를 삭제합니다. 계속하시겠습니까?")) return;
@@ -63,8 +53,8 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="text-5xl mb-4">🎮</div>
             <div className="text-[15px] font-medium text-[#ededed] mb-2">첫 번째 프로젝트를 만들어보세요</div>
-            <div className="text-[12px] text-[#4a4a55] mb-6">장르에 맞는 스키마와 데이터를 자동으로 구성합니다</div>
-            <Btn variant="primary" onClick={() => setShowModal(true)}><Plus size={11} />새 프로젝트 만들기</Btn>
+            <div className="text-[12px] text-[#4a4a55] mb-6">장르를 좁혀가면 AI가 맞는 스키마를 자동으로 구성합니다</div>
+            <Btn variant="primary" onClick={() => setShowWizard(true)}><Plus size={11} />새 프로젝트 만들기</Btn>
           </div>
         )}
 
@@ -100,7 +90,7 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
               ))}
               <div
                 className="border border-dashed border-[#2a2a2f] rounded-xl flex flex-col items-center justify-center gap-2 min-h-[140px] text-[#3a3a42] cursor-pointer hover:border-[#7c3aed]/40 hover:text-[#6b6b77] transition-colors"
-                onClick={() => setShowModal(true)}
+                onClick={() => setShowWizard(true)}
               >
                 <div className="text-xl">＋</div>
                 <div className="text-[11px]">새 프로젝트</div>
@@ -110,29 +100,12 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
         )}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="새 프로젝트">
-        <div className="space-y-3">
-          <div>
-            <div className="text-[11px] text-[#6b6b77] mb-1">프로젝트명 *</div>
-            <Input placeholder="예: ProjectZ" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div>
-            <div className="text-[11px] text-[#6b6b77] mb-1">장르</div>
-            <Select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}>
-              <option value="">선택 안함</option>
-              {GENRES.map((g) => <option key={g} value={g}>{g}</option>)}
-            </Select>
-          </div>
-          <div>
-            <div className="text-[11px] text-[#6b6b77] mb-1">설명</div>
-            <Input placeholder="간단한 설명 (선택)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Btn onClick={() => setShowModal(false)}>취소</Btn>
-            <Btn variant="primary" onClick={create}>생성</Btn>
-          </div>
-        </div>
-      </Modal>
+      {showWizard && (
+        <ProjectWizard
+          onClose={() => setShowWizard(false)}
+          onCreated={(id, name) => { setShowWizard(false); load(); onNavigate("schema", id, name); }}
+        />
+      )}
     </div>
   );
 }
