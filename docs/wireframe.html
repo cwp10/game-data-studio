@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Data Studio — PLAN 고도화 와이어프레임</title>
+<style>
+:root{
+  --bg:#0f0f10; --panel:#16161a; --panel2:#1a1a1c; --hover:#1e1e24; --sel:#1e1b4b;
+  --text:#ededed; --text2:#9a9aa3; --text3:#6b6b77; --text4:#4a4a55;
+  --border:#2a2a2f; --border2:#3a3a42;
+  --accent:#7c3aed; --accent2:#8b5cf6;
+  --green:#4ade80; --amber:#f59e0b; --red:#f87171; --info:#c4b5fd;
+  --ssr:#f9a8d4; --ssr-bg:#3d0a1e; --sr:#fbbf24; --sr-bg:#451a03; --r:#c4b5fd; --r-bg:#1e1b4b; --n:#9a9aa3; --n-bg:#1a1a1c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.4}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace}
+
+/* 타이틀바 */
+.titlebar{height:38px;background:#1a1a1c;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px}
+.dot{width:12px;height:12px;border-radius:50%}
+.dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+.titlebar .tt{margin-left:8px;color:var(--text2);font-size:12px}
+
+/* 레이아웃 */
+.layout{display:flex;height:calc(100vh - 38px)}
+.sidebar{width:212px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.logo{padding:14px 16px;font-weight:700;font-size:14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.nav{flex:1;padding:8px 0;overflow:auto}
+.nav-item{width:100%;text-align:left;padding:9px 16px;display:flex;align-items:center;gap:10px;color:var(--text2);font-size:13px;border-left:2px solid transparent}
+.nav-item:hover{background:var(--hover)}
+.nav-item.active{background:var(--hover);color:var(--accent2);border-left-color:var(--accent);font-weight:600}
+.nav-item .ico{width:16px;text-align:center;opacity:.85}
+.nav-foot{padding:10px 16px;border-top:1px solid var(--border);color:var(--text3);display:flex;gap:10px;align-items:center;font-size:12px}
+.content{flex:1;overflow:auto;display:flex;flex-direction:column}
+
+/* 공통 */
+.screen{display:none;flex-direction:column;height:100%}
+.screen.active{display:flex}
+.chead{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.chead h1{font-size:15px;font-weight:600}
+.chead .sub{font-size:11px;color:var(--text3);margin-top:2px}
+.phase-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--accent);color:#fff;margin-left:8px}
+.phase-badge.p1{background:#2563eb}.phase-badge.p2{background:#0891b2}.phase-badge.p3{background:#7c3aed}.phase-badge.p0{background:#16a34a}
+.note{font-size:10px;color:var(--text4);background:#141416;border:1px dashed var(--border2);border-radius:6px;padding:6px 10px;margin:0}
+.body{padding:18px 20px;overflow:auto;flex:1}
+.row{display:flex;gap:14px}
+.label{font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+
+/* 배지 */
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:6px}
+.b-ssr{background:var(--ssr-bg);color:var(--ssr)}.b-sr{background:var(--sr-bg);color:var(--sr)}.b-r{background:var(--r-bg);color:var(--r)}.b-n{background:var(--n-bg);color:var(--n)}
+.b-type{background:#0f1f17;color:#5eead4}.b-num{background:#1a1530;color:#c4b5fd}.b-enum{background:#2a1626;color:#f0abfc}
+.b-fire{background:#3a1410;color:#fb7185}.b-water{background:#0c1f33;color:#60a5fa}.b-light{background:#332d0a;color:#fde047}.b-dark{background:#241830;color:#c084fc}.b-wind{background:#0d2818;color:#6ee7b7}.b-earth{background:#2a1f0f;color:#fbbf24}
+.b-gver{background:#16a34a22;color:#4ade80}.b-warn{background:#451a03;color:#fbbf24}.b-danger{background:#3a1010;color:#f87171}
+
+/* 버튼 */
+.btn{font-size:11px;padding:5px 11px;border:1px solid var(--border2);border-radius:7px;color:var(--text2);background:var(--panel2)}
+.btn:hover{border-color:var(--accent);color:var(--text)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.sm{font-size:10px;padding:3px 8px}
+.toolbar{display:flex;gap:6px;align-items:center}
+.icobtn{width:30px;height:28px;border:1px solid var(--border);border-radius:7px;background:var(--panel2);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;font-size:14px}
+.icobtn:hover{border-color:var(--accent);color:var(--text)}
+.saved{font-size:11px;color:var(--green);display:flex;align-items:center;gap:5px}
+.saved::before{content:"●";font-size:8px}
+
+/* 카드 */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.stat .v{font-size:28px;font-weight:700;margin-top:6px}
+.stat .k{font-size:11px;color:var(--text3)}
+
+/* 테이블 */
+table{border-collapse:collapse;width:100%;font-size:12px}
+th{text-align:left;padding:8px 10px;color:var(--text3);font-weight:500;font-size:11px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg)}
+td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+tr.selrow{background:var(--sel)}
+.cell-sel{background:#2a1f55;outline:1px solid var(--accent)}
+.cell-edit{outline:2px solid var(--accent);background:var(--sel);padding:2px 6px;border-radius:3px;color:#fff}
+.anom-d{color:var(--red);font-weight:600}
+.anom-w{color:var(--amber);font-weight:600}
+.dot-d::before{content:"●";color:#ef4444;font-size:7px;margin-right:4px}
+.dot-w::before{content:"●";color:var(--amber);font-size:7px;margin-right:4px}
+.notemark{color:var(--accent2);font-size:10px;margin-left:4px;cursor:help}
+
+/* 테이블 사이드 */
+.tlist{width:150px;border-right:1px solid var(--border);padding:10px 0;flex-shrink:0;overflow:auto}
+.tlist .ti{padding:7px 14px;font-size:12px;color:var(--text2);border-left:2px solid transparent;cursor:pointer}
+.tlist .ti:hover{background:var(--hover)}
+.tlist .ti.active{background:var(--hover);color:var(--text);border-left-color:var(--accent)}
+.tlist .ti .lv{font-size:9px;color:var(--text4);margin-left:5px}
+
+/* 하단 탭 */
+.btabs{border-top:1px solid var(--border);background:var(--panel);display:flex;gap:0;padding:0 14px}
+.btab{padding:9px 14px;font-size:11px;color:var(--text3);border-bottom:2px solid transparent}
+.btab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.bpanel{background:var(--panel);padding:14px 18px;min-height:120px}
+
+/* 칩 */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:5px 10px;border:1px solid var(--border2);border-radius:16px;color:var(--text2);background:var(--panel2)}
+.chip.on{border-color:var(--accent);color:var(--accent2);background:#1a1530}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+
+/* 장르 카드 */
+.gcards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.gcard{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;position:relative}
+.gcard:hover{border-color:var(--border2)}
+.gcard.on{border-color:var(--accent);background:#15101f}
+.gcard .gi{font-size:22px}
+.gcard .gn{font-weight:600;margin:8px 0 4px;font-size:14px}
+.gcard .gd{font-size:11px;color:var(--text3);line-height:1.5}
+.gcard .rank{position:absolute;top:10px;right:10px;font-size:9px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:8px}
+
+/* 시뮬 유형 카드 */
+.simcards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.simcard{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer}
+.simcard:hover{border-color:var(--accent)}
+.simcard .si{font-size:20px}
+.simcard .sn{font-weight:600;margin:8px 0 4px}
+.simcard .sd{font-size:11px;color:var(--text3);line-height:1.5}
+.simcard .sg{margin-top:10px;display:flex;gap:5px;flex-wrap:wrap}
+
+/* 서브탭 */
+.subtabs{display:flex;gap:6px;margin-bottom:16px}
+.subtab{font-size:12px;padding:6px 14px;border-radius:8px;color:var(--text3);border:1px solid var(--border)}
+.subtab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.subpane{display:none}.subpane.active{display:block}
+
+.big{font-size:42px;font-weight:700;line-height:1}
+.ci{font-size:13px;color:var(--text2)}
+.metric{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.metric .mk{color:var(--text3)}
+.logline{font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--text2)}
+.logline .t{color:var(--text4);margin-right:6px}
+.ai-card{background:#15101f;border:1px solid #2d1b4d;border-radius:10px;padding:14px;margin-bottom:10px}
+.ai-card .ah{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--accent2);margin-bottom:8px}
+.warn-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:7px;font-size:12px}
+.warn-item.d{border-color:#3a1010;background:#160a0a}
+.warn-item.w{border-color:#2a1f0f;background:#15110a}
+small{color:var(--text4)}
+.kbd{font-size:10px;background:var(--panel2);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;color:var(--text3)}
+input,select{font-family:inherit}
+.inp{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:12px;width:100%}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+  <span class="tt">Game Data Studio — 방치형 RPG 데모 · <b style="color:var(--accent2)">PLAN 고도화 와이어프레임</b></span>
+</div>
+
+<div class="layout">
+  <!-- 사이드바 -->
+  <aside class="sidebar">
+    <div class="logo">Game Data Studio <span style="color:var(--text4)">⊟</span></div>
+    <nav class="nav">
+      <button class="nav-item active" data-s="onboard"><span class="ico">＋</span>새 프로젝트</button>
+      <button class="nav-item" data-s="schema"><span class="ico">▦</span>스키마</button>
+      <button class="nav-item" data-s="data"><span class="ico">▤</span>데이터</button>
+      <button class="nav-item" data-s="types"><span class="ico">◈</span>타입</button>
+      <button class="nav-item" data-s="balance"><span class="ico">▮</span>밸런싱</button>
+      <button class="nav-item" data-s="sim"><span class="ico">▶</span>시뮬레이션</button>
+      <button class="nav-item" data-s="eco"><span class="ico">◉</span>경제</button>
+      <button class="nav-item" data-s="mem"><span class="ico">▣</span>메모리</button>
+    </nav>
+    <div class="nav-foot"><span class="ico">⚙</span>설정</div>
+  </aside>
+
+  <!-- 콘텐츠 -->
+  <main class="content">
+
+    <!-- ===== Phase 0 · RPG 온보딩 ===== -->
+    <section class="screen active" id="s-onboard">
+      <div class="chead">
+        <div><h1>새 프로젝트 — 장르 선택 <span class="phase-badge p0">Phase 0</span></h1>
+          <div class="sub">RPG 전용 온보딩 · 장르 선택 시 검증 스키마 템플릿 + 주력 시뮬이 함께 제안됩니다</div></div>
+        <button class="btn">취소</button>
+      </div>
+      <div class="body">
+        <div class="row" style="gap:20px">
+          <div style="flex:1.4">
+            <div class="label">RPG 하위 장르 (6종)</div>
+            <div class="gcards">
+              <div class="gcard on"><div class="gi">🎴</div><div class="gn">수집형 RPG</div><div class="gd">가챠·캐릭터 수집·성장·스킬</div></div>
+              <div class="gcard"><div class="gi">⏳</div><div class="gn">방치형 RPG</div><div class="gd">자동전투·오프라인 보상·강화</div></div>
+              <div class="gcard"><div class="gi">🌐</div><div class="gn">MMORPG</div><div class="gd">직업·장비강화·길드·경제·PvP</div></div>
+              <div class="gcard"><div class="gi">⚔️</div><div class="gn">턴제/액션 RPG</div><div class="gd">속성상성·스킬트리·보스전</div></div>
+              <div class="gcard"><div class="gi">🎲</div><div class="gn">로그라이크 RPG</div><div class="rank">설문 50% 1위</div><div class="gd">런/층 스케일링·아이템 시너지</div></div>
+              <div class="gcard"><div class="gi">♟️</div><div class="gn">SRPG (전략)</div><div class="gd">유닛 성장률·무기 상성·그리드</div></div>
+            </div>
+            <p class="note" style="margin-top:14px">※ 비RPG 장르·자유입력 제거(완전 RPG 전용). 설문 실측: 로그라이크 50%·RPG 41.7%·방치형 33.3% → 6종 적중</p>
+          </div>
+          <div style="flex:1">
+            <div class="label">제안 미리보기 — 수집형 RPG</div>
+            <div class="card">
+              <div style="font-size:12px;color:var(--text3);margin-bottom:10px">검증 템플릿 기반 스키마 (하이브리드 성장)</div>
+              <div class="chips" style="margin-bottom:14px">
+                <span class="chip">characters <small>메타</small></span>
+                <span class="chip on">character_levels <small>전개</small></span>
+                <span class="chip">skills</span><span class="chip">items</span>
+                <span class="chip">stages</span><span class="chip">drop_tables</span><span class="chip">gacha_tables</span>
+              </div>
+              <div class="label" style="margin-top:6px">주력 시뮬레이션</div>
+              <div class="chips">
+                <span class="chip on">가챠 ★</span><span class="chip">전투</span><span class="chip">스탯 계산기</span>
+              </div>
+              <div style="margin-top:16px">
+                <div class="label">프로젝트명</div>
+                <input class="inp" value="신규 수집형 RPG" />
+                <button class="btn primary" style="margin-top:12px;width:100%;padding:9px">이 컨셉으로 생성</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Phase 1 · 데이터 에디터 ===== -->
+    <section class="screen" id="s-data">
+      <div class="chead">
+        <div><h1>데이터 — heroes <span class="phase-badge p1">Phase 1</span></h1>
+          <div class="sub">셀 선택·Undo/Redo·자동저장 표시·IME 안전 입력 추가</div></div>
+        <div class="toolbar">
+          <button class="icobtn" title="실행취소 Ctrl+Z">↶</button>
+          <button class="icobtn" title="다시실행 Ctrl+Shift+Z">↷</button>
+          <button class="icobtn" title="복사 Ctrl+C">⧉</button>
+          <span class="saved">저장됨</span>
+          <button class="btn sm">CSV</button><button class="btn sm">JSON</button>
+        </div>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden">
+        <div class="tlist">
+          <div class="ti active">heroes</div>
+          <div class="ti">hero_levels <span class="lv">전개</span></div>
+          <div class="ti">enhancement</div>
+          <div class="ti">skills</div>
+          <div class="ti">stages</div>
+          <div class="ti">equipment</div>
+          <div class="ti">gacha</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:1;overflow:auto">
+            <table>
+              <thead><tr><th>#</th><th>id</th><th>name</th><th>grade</th><th>element</th><th>role</th><th>base_hp</th><th>base_atk</th><th>base_def</th><th>base_spd</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td class="mono" style="color:var(--text3)">9mp39CG…</td><td>아이제아<span class="notemark" title="근거 메모: 2026-06 보스전 고려 상향">✎</span></td><td><span class="badge b-ssr">SSR</span></td><td><span class="badge b-light">Light</span></td><td>Dealer</td><td class="cell-sel">4,800</td><td class="cell-sel anom-d dot-d">9,999</td><td>260</td><td>118</td></tr>
+                <tr><td>2</td><td class="mono" style="color:var(--text3)">9Oshw…</td><td>블레이즈</td><td><span class="badge b-ssr">SSR</span></td><td><span class="badge b-fire">Fire</span></td><td>Dealer</td><td class="cell-sel">5,100</td><td class="cell-sel">680</td><td>240</td><td>112</td></tr>
+                <tr><td>3</td><td class="mono" style="color:var(--text3)">RehAc…</td><td>아이스퀸</td><td><span class="badge b-ssr">SSR</span></td><td><span class="badge b-water">Water</span></td><td>Support</td><td>4,200</td><td><span class="cell-edit">525</span></td><td>310</td><td>125</td></tr>
+                <tr><td>4</td><td class="mono" style="color:var(--text3)">EKL4h…</td><td>다크나이트</td><td><span class="badge b-ssr">SSR</span></td><td><span class="badge b-dark">Dark</span></td><td>Tank</td><td class="anom-w dot-w">7,200</td><td>480</td><td>480</td><td>95</td></tr>
+                <tr><td>5</td><td class="mono" style="color:var(--text3)">AUHz…</td><td>스톰윙</td><td><span class="badge b-sr">SR</span></td><td><span class="badge b-wind">Wind</span></td><td>Dealer</td><td>3,800</td><td>580</td><td>210</td><td>135</td></tr>
+                <tr><td>6</td><td class="mono" style="color:var(--text3)">s8mH…</td><td>어스가드</td><td><span class="badge b-sr">SR</span></td><td><span class="badge b-earth">Earth</span></td><td>Tank</td><td>6,000</td><td>380</td><td>420</td><td>88</td></tr>
+                <tr><td>7</td><td class="mono" style="color:var(--text3)">HlaJ…</td><td>플레임</td><td><span class="badge b-sr">SR</span></td><td><span class="badge b-fire">Fire</span></td><td>Dealer</td><td>3,600</td><td>560</td><td>200</td><td>120</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note" style="margin:8px 12px">선택: B2:H3 범위(보라) · 편집 중: 아이스퀸.base_atk(IME 안전 input) · 빨강=이상값(z&gt;3) ●, 주황=경계 ● · ✎=수치 근거 메모(P3-5)</p>
+          <div class="btabs">
+            <div class="btab active">대화</div><div class="btab">밸런싱 분석</div><div class="btab">차트</div>
+          </div>
+          <div class="bpanel" style="text-align:center;color:var(--text3)">
+            <div style="font-size:20px;margin-bottom:6px">✦</div>
+            자연어로 데이터를 지시하면 AI가 처리합니다
+            <div class="chips" style="justify-content:center;margin-top:12px">
+              <span class="chip">SSR 캐릭터 3개 추가해줘</span><span class="chip">전체 def를 10% 올려줘</span><span class="chip">이상값을 권장값으로 보정해줘</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Phase 2 · 시뮬레이션 ===== -->
+    <section class="screen" id="s-sim">
+      <div class="chead">
+        <div><h1>시뮬레이션 <span class="phase-badge p2">Phase 2</span></h1>
+          <div class="sub">네이티브 엔진(몬테카를로 + Wilson 95% CI) — AI는 결과 해석·C# export 보조로 격하</div></div>
+        <button class="btn primary">＋ 새 시뮬레이션</button>
+      </div>
+      <div class="body">
+        <div class="subtabs">
+          <button class="subtab active" data-sub="hub">유형 선택</button>
+          <button class="subtab" data-sub="combat">전투 결과</button>
+          <button class="subtab" data-sub="dist">분포·비교</button>
+        </div>
+
+        <!-- 허브 -->
+        <div class="subpane active" id="sub-hub">
+          <div class="simcards">
+            <div class="simcard"><div class="si">🧮</div><div class="sn">스탯 계산기</div><div class="sd">Lv·강화별 최종 스탯 (하이브리드 전개 조회)</div><div class="sg"><span class="badge b-r">전 장르</span></div></div>
+            <div class="simcard"><div class="si">⚔️</div><div class="sn">전투 시뮬</div><div class="sd">몬테카를로 1k~100k · 승률 + Wilson CI · 1:1/N:N</div><div class="sg"><span class="badge b-sr">턴제 ★</span><span class="badge b-ssr">수집형 ★</span></div></div>
+            <div class="simcard"><div class="si">🎴</div><div class="sn">가챠 시뮬</div><div class="sd">기대 뽑기수·확률 분포·천장(pity)</div><div class="sg"><span class="badge b-ssr">수집형 ★</span></div></div>
+            <div class="simcard"><div class="si">📊</div><div class="sn">DPS 분산</div><div class="sd">데미지 롤 분포·빌드 비교</div><div class="sg"><span class="badge b-sr">턴제 ★</span><span class="badge b-r">MMO ★</span></div></div>
+            <div class="simcard"><div class="si">💰</div><div class="sn">경제 시뮬</div><div class="sd">재화 흐름 + 인플레이션/디플레이션</div><div class="sg"><span class="badge b-r">방치 ★</span><span class="badge b-r">MMO ★</span></div></div>
+            <div class="simcard"><div class="si">📈</div><div class="sn">난이도·플레이타임</div><div class="sd">스테이지 난이도 + 예상 플레이타임(1턴=1초)</div><div class="sg"><span class="badge b-r">방치 ★</span></div></div>
+          </div>
+        </div>
+
+        <!-- 전투 결과 -->
+        <div class="subpane" id="sub-combat">
+          <div class="row" style="gap:16px">
+            <div class="card" style="width:230px;flex-shrink:0">
+              <div class="label">입력</div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">아군 유닛</div>
+              <input class="inp" value="아이제아 (Lv50 +7)"><div style="height:8px"></div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">적 / 스테이지</div>
+              <input class="inp" value="챕터12 보스"><div style="height:8px"></div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">반복 횟수</div>
+              <input class="inp" value="10,000">
+              <button class="btn primary" style="width:100%;margin-top:12px;padding:8px">▶ 시뮬 실행</button>
+            </div>
+            <div style="flex:1">
+              <div class="row" style="gap:14px">
+                <div class="card" style="flex:1">
+                  <div class="label">승률 (몬테카를로 n=10,000)</div>
+                  <div class="big" style="color:var(--green)">62.4%</div>
+                  <div class="ci" style="margin-top:8px">Wilson 95% CI <b style="color:var(--text)">[61.5% ~ 63.3%]</b></div>
+                  <!-- CI 막대 -->
+                  <svg width="100%" height="34" style="margin-top:10px">
+                    <rect x="0" y="14" width="100%" height="6" rx="3" fill="#222"></rect>
+                    <rect x="55%" y="14" width="10%" height="6" rx="3" fill="var(--accent)"></rect>
+                    <rect x="61.5%" y="10" width="1.8%" height="14" rx="1" fill="var(--green)"></rect>
+                  </svg>
+                  <div class="metric"><span class="mk">평균 소요 턴</span><span>8.3턴</span></div>
+                  <div class="metric"><span class="mk">크리티컬 발생</span><span>22.1%</span></div>
+                  <div class="metric" style="border:none"><span class="mk">평균 전투 시간</span><span>8.3초</span></div>
+                </div>
+                <div class="card" style="flex:1.3">
+                  <div class="label">HP 추이 (대표 전투)</div>
+                  <svg width="100%" height="150" viewBox="0 0 320 150" preserveAspectRatio="none">
+                    <line x1="0" y1="120" x2="320" y2="120" stroke="#2a2a2f"/>
+                    <line x1="0" y1="80" x2="320" y2="80" stroke="#1f1f24"/>
+                    <line x1="0" y1="40" x2="320" y2="40" stroke="#1f1f24"/>
+                    <polyline fill="none" stroke="#60a5fa" stroke-width="2" points="0,20 40,28 80,35 120,48 160,55 200,70 240,78 280,92 320,100"/>
+                    <polyline fill="none" stroke="#f87171" stroke-width="2" points="0,30 40,50 80,62 120,80 160,95 200,108 240,116 280,119 320,120"/>
+                    <circle cx="320" cy="120" r="3" fill="#f87171"/>
+                  </svg>
+                  <div style="font-size:10px;color:var(--text3);margin-top:4px"><span style="color:#60a5fa">━</span> 아군 &nbsp; <span style="color:#f87171">━</span> 적 (8.3턴 처치)</div>
+                </div>
+              </div>
+              <div class="card" style="margin-top:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><div class="label" style="margin:0">전투 로그 (대표 1회)</div><button class="btn sm">로그 export (CSV)</button></div>
+                <div style="margin-top:8px">
+                  <div class="logline"><span class="t mono">T1</span>아이제아 → 보스 일반공격 <b>720</b> (크리)</div>
+                  <div class="logline"><span class="t mono">T2</span>보스 → 아이제아 광역 <b>540</b> · 아이제아 → 보스 <b>680</b></div>
+                  <div class="logline"><span class="t mono">T3</span>아이제아 스킬 <b>1,440</b> (크리) · 보스 HP 38%</div>
+                  <div class="logline" style="border:none"><span class="t mono">T8</span>보스 처치 — <b style="color:var(--green)">승리</b></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 분포/비교 -->
+        <div class="subpane" id="sub-dist">
+          <div class="row" style="gap:14px">
+            <div class="card" style="flex:1">
+              <div class="label">가챠 — 천장까지 뽑기 수 분포 (n=10,000)</div>
+              <svg width="100%" height="160" viewBox="0 0 300 160">
+                <g fill="var(--accent)">
+                  <rect x="6"  y="120" width="20" height="40"/><rect x="32" y="92" width="20" height="68"/>
+                  <rect x="58" y="60" width="20" height="100"/><rect x="84" y="44" width="20" height="116"/>
+                  <rect x="110" y="70" width="20" height="90"/><rect x="136" y="96" width="20" height="64"/>
+                  <rect x="162" y="116" width="20" height="44"/><rect x="188" y="130" width="20" height="30"/>
+                  <rect x="214" y="140" width="20" height="20"/></g>
+                <rect x="240" y="20" width="20" height="140" fill="#f59e0b" opacity=".7"/>
+                <text x="244" y="14" fill="#f59e0b" font-size="9">천장</text>
+              </svg>
+              <div class="metric"><span class="mk">평균 획득</span><span>43.2뽑기</span></div>
+              <div class="metric" style="border:none"><span class="mk">천장(90) 도달률</span><span>11.8%</span></div>
+            </div>
+            <div class="card" style="flex:1">
+              <div class="label">DPS 분산 — 빌드 A vs B (다중 시리즈)</div>
+              <svg width="100%" height="160" viewBox="0 0 300 160">
+                <g fill="#60a5fa" opacity=".75"><rect x="20" y="110" width="14" height="50"/><rect x="56" y="80" width="14" height="80"/><rect x="92" y="50" width="14" height="110"/><rect x="128" y="74" width="14" height="86"/><rect x="164" y="104" width="14" height="56"/><rect x="200" y="128" width="14" height="32"/></g>
+                <g fill="#f0abfc" opacity=".65"><rect x="34" y="124" width="14" height="36"/><rect x="70" y="96" width="14" height="64"/><rect x="106" y="64" width="14" height="96"/><rect x="142" y="46" width="14" height="114"/><rect x="178" y="70" width="14" height="90"/><rect x="214" y="100" width="14" height="60"/></g>
+              </svg>
+              <div style="font-size:10px;color:var(--text3)"><span style="color:#60a5fa">■</span> 빌드 A (평균 1,820) &nbsp; <span style="color:#f0abfc">■</span> 빌드 B (평균 2,140)</div>
+            </div>
+            <div class="card" style="width:200px;flex-shrink:0">
+              <div class="label">능력치 레이더</div>
+              <svg width="100%" height="160" viewBox="0 0 160 160">
+                <polygon points="80,20 132,50 132,110 80,140 28,110 28,50" fill="none" stroke="#2a2a2f"/>
+                <polygon points="80,50 116,68 116,100 80,120 44,100 44,68" fill="none" stroke="#1f1f24"/>
+                <polygon points="80,28 124,54 120,104 80,128 40,98 38,60" fill="#60a5fa33" stroke="#60a5fa" stroke-width="1.5"/>
+                <polygon points="80,40 110,62 128,108 76,118 46,108 44,52" fill="#f0abfc22" stroke="#f0abfc" stroke-width="1.5"/>
+              </svg>
+              <div style="font-size:10px;color:var(--text3)"><span style="color:#60a5fa">■</span> 아이제아 &nbsp; <span style="color:#f0abfc">■</span> 블레이즈</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Phase 3 · 밸런싱 ===== -->
+    <section class="screen" id="s-balance">
+      <div class="chead">
+        <div><h1>밸런싱 <span class="phase-badge p3">Phase 3</span></h1>
+          <div class="sub">AI 밸런싱 제안 강화 — 통계 보정 → 챗 브리지(실제 Claude)가 장르·관계 맥락 리포트</div></div>
+        <button class="btn primary">✦ AI 분석 실행</button>
+      </div>
+      <div class="body">
+        <div class="row" style="gap:12px;margin-bottom:18px">
+          <div class="stat" style="flex:1"><div class="k">전체 데이터</div><div class="v">148</div></div>
+          <div class="stat" style="flex:1"><div class="k">이상값</div><div class="v" style="color:var(--red)">5</div></div>
+          <div class="stat" style="flex:1"><div class="k">경고</div><div class="v" style="color:var(--amber)">12</div></div>
+          <div class="stat" style="flex:1"><div class="k">밸런스 점수</div><div class="v" style="color:var(--green)">82</div></div>
+        </div>
+        <div class="label">AI 밸런싱 리포트 (장르 맥락 반영)</div>
+        <div class="ai-card">
+          <div class="ah">✦ Claude 밸런싱 제안</div>
+          <div style="font-size:12px;line-height:1.6">
+            <b style="color:var(--red)">아이제아.base_atk = 9,999</b> 는 SSR Dealer 그룹 평균(688) 대비 <b>+13.5σ</b>로 명백한 이상값입니다.
+            수집형 RPG 표준에서 SSR Dealer atk는 보통 600~750 구간이며, 이 값은 가챠 밸런스를 붕괴시킵니다.
+            <br><b style="color:var(--green)">권장: 9,999 → 720</b> (그룹 평균 + 0.5σ, 상위 티어 유지).
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn primary sm">권장값 적용 (720)</button>
+            <button class="btn sm">전체 이상값 일괄 보정</button>
+            <button class="btn ghost sm">무시</button>
+          </div>
+        </div>
+        <div class="label" style="margin-top:18px">크로스 테이블 비교 (heroes.base_atk ↔ hero_levels.atk)</div>
+        <div class="card">
+          <svg width="100%" height="120" viewBox="0 0 400 120" preserveAspectRatio="none">
+            <polyline fill="none" stroke="var(--accent2)" stroke-width="2" points="0,90 50,80 100,68 150,58 200,46 250,38 300,28 350,20 400,14"/>
+            <polyline fill="none" stroke="var(--green)" stroke-width="2" points="0,95 50,88 100,78 150,70 200,60 250,52 300,40 350,30 400,22"/>
+            <circle cx="200" cy="46" r="4" fill="var(--red)"/><text x="206" y="44" fill="var(--red)" font-size="9">이상 구간</text>
+          </svg>
+          <div style="font-size:10px;color:var(--text3)"><span style="color:var(--accent2)">━</span> A: heroes.base_atk &nbsp; <span style="color:var(--green)">━</span> B: hero_levels.atk (Lv50)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Phase 3 · 스키마(유효성/FK) ===== -->
+    <section class="screen" id="s-schema">
+      <div class="chead">
+        <div><h1>스키마 — heroes <span class="phase-badge p3">Phase 3</span></h1>
+          <div class="sub">컬럼 제약(min/max·required·unique) + FK 무결성 경고</div></div>
+        <div class="toolbar"><button class="btn sm">관계</button><button class="btn sm">제약 검사</button></div>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden">
+        <div class="tlist">
+          <div class="ti active">heroes <span class="lv">12</span></div>
+          <div class="ti">hero_levels</div><div class="ti">enhancement</div><div class="ti">skills</div>
+          <div class="ti">stages</div><div class="ti">equipment</div><div class="ti">gacha</div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:14px 18px">
+          <div class="label">유효성 경고 (P3-2)</div>
+          <div class="warn-item d"><span class="badge b-danger">제약 위반</span> base_atk = 9,999 → 제약 <b>0~5000</b> 초과 · <small>2건</small></div>
+          <div class="warn-item d"><span class="badge b-danger">깨진 FK</span> drop_tables.item_id → items.id 참조 끊김 · <small>1건</small></div>
+          <div class="warn-item w"><span class="badge b-warn">필수 누락</span> skills.description 비어있음 · <small>4건</small></div>
+          <div class="label" style="margin-top:18px">컬럼 + 제약</div>
+          <table>
+            <thead><tr><th>컬럼명</th><th>타입</th><th>참조</th><th>제약</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td>id <span class="badge b-r">PK</span></td><td><span class="badge b-type">string</span></td><td>—</td><td><span class="badge b-warn">unique</span></td><td>고유 식별자</td></tr>
+              <tr><td>name</td><td><span class="badge b-type">string</span></td><td>—</td><td><span class="badge b-warn">required</span></td><td>캐릭터명</td></tr>
+              <tr><td>grade</td><td><span class="badge b-enum">enum Grade</span></td><td style="color:var(--red)">→ gacha.grade</td><td>—</td><td>N/R/SR/SSR</td></tr>
+              <tr><td>element</td><td><span class="badge b-enum">enum Element</span></td><td>—</td><td>—</td><td>속성</td></tr>
+              <tr><td>base_hp</td><td><span class="badge b-num">number</span></td><td>—</td><td><span class="badge b-warn">100~99999</span></td><td>기본 체력</td></tr>
+              <tr><td>base_atk</td><td><span class="badge b-num">number</span></td><td>—</td><td><span class="badge b-danger">0~5000 ⚠</span></td><td>기본 공격력</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 미설계 화면 placeholder -->
+    <section class="screen" id="s-types"><div class="chead"><h1>타입 (enum)</h1></div><div class="body"><p class="note">기존 화면 유지 — PLAN 변경 없음</p></div></section>
+    <section class="screen" id="s-eco"><div class="chead"><h1>경제 <span class="phase-badge p2">Phase 2</span></h1><div class="sub">인플레이션/디플레이션 변동율 추가</div></div><div class="body"><p class="note">P2-7: EcoEntry.growth 필드 + 실질잔액 시리즈 (기존 EconomySim 확장)</p></div></section>
+    <section class="screen" id="s-mem"><div class="chead"><h1>메모리</h1></div><div class="body"><p class="note">기존 화면 유지 + P3-5 수치 근거 메모 연계 후보</p></div></section>
+
+  </main>
+</div>
+
+<script>
+const navs=document.querySelectorAll('.nav-item');
+const screens=document.querySelectorAll('.screen');
+navs.forEach(n=>n.addEventListener('click',()=>{
+  navs.forEach(x=>x.classList.remove('active'));
+  n.classList.add('active');
+  const s=n.dataset.s;
+  screens.forEach(sc=>sc.classList.toggle('active', sc.id==='s-'+s));
+}));
+document.querySelectorAll('.subtab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.subtab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelectorAll('.subpane').forEach(p=>p.classList.toggle('active', p.id==='sub-'+t.dataset.sub));
+}));
+document.querySelectorAll('.gcard').forEach(c=>c.addEventListener('click',()=>{
+  document.querySelectorAll('.gcard').forEach(x=>x.classList.remove('on'));c.classList.add('on');
+}));
+document.querySelectorAll('.btab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.btab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
+}));
+</script>
+</body>
+</html>
