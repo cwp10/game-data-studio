@@ -7,6 +7,8 @@ import { runMonteCarlo } from "@/lib/simulation/combat";
 import { runGachaSimulation } from "@/lib/simulation/gacha";
 import { runDpsSimulation, type BuildSpec } from "@/lib/simulation/dps";
 import { difficultyCurve, type StageInput } from "@/lib/simulation/difficulty";
+import { winRateMatrix } from "@/lib/balance/correlate";
+import { type Unit } from "@/lib/simulation/combat";
 
 export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("project_id");
@@ -82,6 +84,20 @@ export async function POST(req: NextRequest) {
     const secondsPerTurn = Number.isFinite(Number(body.secondsPerTurn)) ? Number(body.secondsPerTurn) : 1;
     const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
     return NextResponse.json(difficultyCurve(body.player, stages, secondsPerTurn, iterations, seed));
+  }
+  if (body.action === "winmatrix") {
+    const units = body.units as Unit[];
+    if (!Array.isArray(units) || units.length < 2) {
+      return NextResponse.json({ error: "units must be an array of at least 2 units" }, { status: 400 });
+    }
+    const rawIterations = Number(body.iterations);
+    if (!Number.isFinite(rawIterations) || rawIterations < 1) {
+      return NextResponse.json({ error: "iterations must be a positive number" }, { status: 400 });
+    }
+    const iterations = Math.min(5000, Math.max(1, Math.floor(rawIterations)));
+    const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
+    const maxUnits = Number.isFinite(Number(body.maxUnits)) ? Math.floor(Number(body.maxUnits)) : undefined;
+    return NextResponse.json(winRateMatrix(units, iterations, seed, maxUnits));
   }
   return NextResponse.json(saveSimulation(body), { status: 201 });
 }

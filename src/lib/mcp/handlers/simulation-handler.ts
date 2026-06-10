@@ -8,6 +8,7 @@ import { runMonteCarlo } from "../../simulation/combat.js";
 import { runGachaSimulation } from "../../simulation/gacha.js";
 import { runDpsSimulation } from "../../simulation/dps.js";
 import { difficultyCurve } from "../../simulation/difficulty.js";
+import { winRateMatrix } from "../../balance/correlate.js";
 import { ok } from "./respond.js";
 
 const buildSpecSchema = z.object({
@@ -117,5 +118,18 @@ export function registerSimulationHandlers(server: McpServer) {
     },
     async ({ player, stages, secondsPerTurn, iterations, seed }) =>
       ok(difficultyCurve(player, stages, secondsPerTurn, iterations, seed))
+  );
+
+  server.tool(
+    "run_winrate_matrix",
+    "유닛 N개 간 1:1 전투 승률 매트릭스(행=attacker 선공, matrix[i][j]∈[0,1], 비대칭). maxUnits 초과 시 truncate",
+    {
+      units: z.array(unitSchema).min(2),
+      iterations: z.number().default(500),
+      seed: z.number().default(0),
+      maxUnits: z.number().default(10),
+    },
+    async ({ units, iterations, seed, maxUnits }) =>
+      ok(winRateMatrix(units, iterations, seed, maxUnits))
   );
 }
