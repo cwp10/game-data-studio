@@ -20,6 +20,12 @@ const buildSpecSchema = z.object({
   attackSpeed: z.number().optional(),
 });
 
+const skillSchema = z.object({
+  type: z.enum(["heal", "invuln", "revive", "aoe"]),
+  cooldown: z.number(),
+  value: z.number(),
+});
+
 const unitSchema = z.object({
   name: z.string(),
   hp: z.number(),
@@ -28,6 +34,7 @@ const unitSchema = z.object({
   speed: z.number(),
   critRate: z.number().optional(),
   critMult: z.number().optional(),
+  skills: z.array(skillSchema).optional(),
 });
 
 export function registerSimulationHandlers(server: McpServer) {

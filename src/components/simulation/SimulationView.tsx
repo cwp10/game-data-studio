@@ -13,9 +13,10 @@ interface Simulation { id: string; name: string; description: string | null; for
 interface RowWithData { id: string; data: Record<string, unknown>; }
 
 // ── 전투 계약 (21_combat_contract.md) ──────────────────────────────
-interface Unit { name: string; hp: number; atk: number; def: number; speed: number; critRate?: number; critMult?: number; }
+interface Skill { type: "heal" | "invuln" | "revive" | "aoe"; cooldown: number; value: number; }
+interface Unit { name: string; hp: number; atk: number; def: number; speed: number; critRate?: number; critMult?: number; skills?: Skill[]; }
 interface HpTracePoint { turn: number; attackerHp: number; defenderHp: number; }
-interface CombatLogEntry { turn: number; actor: string; target: string; damage: number; crit: boolean; remainingHp: number; }
+interface CombatLogEntry { turn: number; actor: string; target: string; damage: number; crit: boolean; remainingHp: number; event?: "attack" | "heal" | "invuln" | "revive" | "aoe"; heal?: number; }
 interface CombatResult {
   iterations: number;
   winRate: number;
@@ -463,7 +464,22 @@ function StatCalculator({ tables }: { tables: Table[] }) {
 // ════════════════════════════════════════════════════════════════════
 const EMPTY_UNIT: Unit = { name: "", hp: 5000, atk: 600, def: 250, speed: 110, critRate: 0, critMult: 1.5 };
 
-function UnitForm({ title, unit, onChange, tables }: { title: string; unit: Unit; onChange: (u: Unit) => void; tables: Table[] }) {
+// 전투 로그의 스킬 이벤트 표시(라벨/배지/행 배경). "attack" 미설정은 기존 공격 행 그대로.
+const SKILL_EVENT_META: Record<"heal" | "invuln" | "revive" | "aoe", { label: string; badge: string; rowBg: string }> = {
+  heal:   { label: "회복", badge: "bg-[#0f2a1a] text-[#4ade80]", rowBg: "bg-[#4ade80]/5" },
+  invuln: { label: "무적", badge: "bg-[#1e1b4b] text-[#c4b5fd]", rowBg: "bg-[#7c3aed]/5" },
+  revive: { label: "부활", badge: "bg-[#0f2a1a] text-[#4ade80]", rowBg: "bg-[#4ade80]/5" },
+  aoe:    { label: "광역", badge: "bg-[#3a1c00] text-[#f59e0b]", rowBg: "bg-[#f59e0b]/5" },
+};
+
+const SKILL_TYPES: { value: Skill["type"]; label: string }[] = [
+  { value: "heal", label: "회복" },
+  { value: "invuln", label: "무적" },
+  { value: "revive", label: "부활" },
+  { value: "aoe", label: "광역" },
+];
+
+function UnitForm({ title, unit, onChange, tables, showSkills }: { title: string; unit: Unit; onChange: (u: Unit) => void; tables: Table[]; showSkills?: boolean }) {
   const [tableId, setTableId] = useState("");
   const [rows, setRows] = useState<RowWithData[]>([]);
   const [cols, setCols] = useState<Column[]>([]);
@@ -490,6 +506,11 @@ function UnitForm({ title, unit, onChange, tables }: { title: string; unit: Unit
   };
 
   const set = (k: keyof Unit, v: number | string) => onChange({ ...unit, [k]: v });
+
+  const skills = unit.skills ?? [];
+  const addSkill = () => onChange({ ...unit, skills: [...skills, { type: "heal", cooldown: 3, value: 1000 }] });
+  const setSkill = (i: number, patch: Partial<Skill>) => onChange({ ...unit, skills: skills.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+  const removeSkill = (i: number) => onChange({ ...unit, skills: skills.filter((_, j) => j !== i) });
 
   return (
     <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl p-4">
@@ -523,6 +544,36 @@ function UnitForm({ title, unit, onChange, tables }: { title: string; unit: Unit
           </div>
         </div>
       </div>
+      {showSkills && (
+        <div className="mt-3 pt-3 border-t border-[#2a2a2f]">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-wide">스킬</div>
+            <button onClick={addSkill} className="text-[#6b6b77] hover:text-[#c4b5fd] flex items-center gap-1 text-[11px]"><Plus size={12} />추가</button>
+          </div>
+          {skills.length === 0 && <div className="text-[11px] text-[#4a4a55]">스킬 없음 (기본 전투)</div>}
+          <div className="space-y-2">
+            {skills.map((s, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                <div>
+                  <div className="text-[10px] text-[#6b6b77] mb-1">유형</div>
+                  <Select value={s.type} onChange={(e) => setSkill(i, { type: e.target.value as Skill["type"] })}>
+                    {SKILL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <div className="text-[10px] text-[#6b6b77] mb-1">쿨다운(턴)</div>
+                  <Input type="number" min={0} value={s.cooldown} onChange={(e) => setSkill(i, { cooldown: Number(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <div className="text-[10px] text-[#6b6b77] mb-1">값</div>
+                  <Input type="number" value={s.value} onChange={(e) => setSkill(i, { value: Number(e.target.value) || 0 })} />
+                </div>
+                <button onClick={() => removeSkill(i)} className="text-[#6b6b77] hover:text-[#f87171] pb-1.5 flex-shrink-0"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -567,8 +618,8 @@ function CombatSim({ tables }: { tables: Table[] }) {
   };
   const exportCsv = () => {
     if (!result) return;
-    const header = "turn,actor,target,damage,crit,remainingHp";
-    const body = result.log.map((l) => `${l.turn},${l.actor},${l.target},${l.damage},${l.crit},${l.remainingHp}`).join("\n");
+    const header = "turn,actor,target,damage,crit,remainingHp,event,heal";
+    const body = result.log.map((l) => `${l.turn},${l.actor},${l.target},${l.damage},${l.crit},${l.remainingHp},${l.event ?? ""},${l.heal ?? ""}`).join("\n");
     download(`${header}\n${body}`, "combat_log.csv", "text/csv");
   };
   const exportJson = () => {
@@ -588,8 +639,8 @@ function CombatSim({ tables }: { tables: Table[] }) {
     <>
       <SectionLabel><Swords size={11} className="inline mr-1 -mt-0.5" />유닛 구성 (1:1)</SectionLabel>
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <UnitForm title="공격자" unit={attacker} onChange={setAttacker} tables={tables} />
-        <UnitForm title="방어자" unit={defender} onChange={setDefender} tables={tables} />
+        <UnitForm title="공격자" unit={attacker} onChange={setAttacker} tables={tables} showSkills />
+        <UnitForm title="방어자" unit={defender} onChange={setDefender} tables={tables} showSkills />
       </div>
 
       <SectionLabel>실행 조건</SectionLabel>
@@ -665,16 +716,27 @@ function CombatSim({ tables }: { tables: Table[] }) {
                 </tr>
               </thead>
               <tbody>
-                {result.log.map((l, i) => (
-                  <tr key={i} className="hover:bg-[#1a1a1c]">
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#6b6b77]">{l.turn}</td>
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#ededed]">{l.actor}</td>
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#9a9aa3]">{l.target}</td>
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#ededed]">{l.damage.toLocaleString()}</td>
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24]">{l.crit ? <span className="text-[#f59e0b] font-medium">CRIT</span> : <span className="text-[#4a4a55]">—</span>}</td>
-                    <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#9a9aa3]">{l.remainingHp.toLocaleString()}</td>
-                  </tr>
-                ))}
+                {result.log.map((l, i) => {
+                  const ev = l.event && l.event !== "attack" ? l.event : null;
+                  const meta = ev ? SKILL_EVENT_META[ev] : null;
+                  return (
+                    <tr key={i} className={`hover:bg-[#1a1a1c] ${meta ? meta.rowBg : ""}`}>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#6b6b77]">{l.turn}</td>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#ededed]">
+                        {meta && <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded mr-1.5 ${meta.badge}`}>{meta.label}</span>}
+                        {l.actor}
+                      </td>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#9a9aa3]">{l.target}</td>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#ededed]">
+                        {l.heal != null && l.heal > 0
+                          ? <span className="text-[#4ade80] font-medium">+{l.heal.toLocaleString()}</span>
+                          : l.damage.toLocaleString()}
+                      </td>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24]">{l.crit ? <span className="text-[#f59e0b] font-medium">CRIT</span> : <span className="text-[#4a4a55]">—</span>}</td>
+                      <td className="px-2.5 py-1 border-b border-[#1f1f24] text-[#9a9aa3]">{l.remainingHp.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
