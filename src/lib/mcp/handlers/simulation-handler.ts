@@ -4,7 +4,18 @@ import { listColumns } from "../../db/repo/columns.js";
 import { readRows } from "../../db/repo/rows.js";
 import { getTable } from "../../db/repo/tables.js";
 import { listSimulations, saveSimulation } from "../../db/repo/simulations.js";
+import { runMonteCarlo } from "../../simulation/combat.js";
 import { ok } from "./respond.js";
+
+const unitSchema = z.object({
+  name: z.string(),
+  hp: z.number(),
+  atk: z.number(),
+  def: z.number(),
+  speed: z.number(),
+  critRate: z.number().optional(),
+  critMult: z.number().optional(),
+});
 
 export function registerSimulationHandlers(server: McpServer) {
   server.tool(
@@ -41,5 +52,18 @@ export function registerSimulationHandlers(server: McpServer) {
       formula_cs: z.string().optional(),
     },
     async (args) => ok(saveSimulation(args))
+  );
+
+  server.tool(
+    "run_combat_simulation",
+    "네이티브 전투 몬테카를로 시뮬(승률+Wilson CI+HP추이+로그)",
+    {
+      attacker: z.array(unitSchema),
+      defender: z.array(unitSchema),
+      iterations: z.number().default(1000),
+      seed: z.number().default(0),
+    },
+    async ({ attacker, defender, iterations, seed }) =>
+      ok(runMonteCarlo(attacker, defender, iterations, seed))
   );
 }
