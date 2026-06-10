@@ -23,9 +23,9 @@ export async function PUT(req: NextRequest) {
       reorderColumns(body.table_id, body.ordered_ids);
       return NextResponse.json({ reordered: true });
     }
-    const { column_id, name, type, enum_type_id, description } = body;
+    const { column_id, name, type, enum_type_id, description, constraints } = body;
     if (!column_id) return NextResponse.json({ error: "column_id required" }, { status: 400 });
-    return NextResponse.json(updateColumn(column_id, { name, type, enum_type_id, description }));
+    return NextResponse.json(updateColumn(column_id, { name, type, enum_type_id, description, constraints }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 400 });
   }

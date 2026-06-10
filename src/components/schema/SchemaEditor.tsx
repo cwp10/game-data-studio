@@ -5,7 +5,8 @@ import { Btn, ContentHeader, Modal, Input, Select, PanelHeader, PanelItem, TypeB
 import { ChatPanel } from "@/components/chat/ChatPanel";
 
 interface Table { id: string; name: string; description: string | null; }
-interface Column { id: string; name: string; type: "string" | "number" | "boolean" | "enum"; description: string | null; enum_type_id: string | null; }
+interface ColumnConstraint { min?: number; max?: number; required?: boolean; unique?: boolean; }
+interface Column { id: string; name: string; type: "string" | "number" | "boolean" | "enum"; description: string | null; enum_type_id: string | null; constraints: ColumnConstraint | null; }
 interface Relation { id: string; from_table_id: string; from_column: string; to_table_id: string; to_column: string; }
 interface EnumType { id: string; name: string; values: string[]; }
 
@@ -18,7 +19,7 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [showTableModal, setShowTableModal] = useState(false);
   const [showColModal, setShowColModal] = useState(false);
   const [tableForm, setTableForm] = useState({ name: "", description: "" });
-  const [colForm, setColForm] = useState<{ id?: string; name: string; type: Column["type"]; description: string; enum_type_id: string }>({ name: "", type: "string", description: "", enum_type_id: "" });
+  const [colForm, setColForm] = useState<{ id?: string; name: string; type: Column["type"]; description: string; enum_type_id: string; min: string; max: string; required: boolean; unique: boolean }>({ name: "", type: "string", description: "", enum_type_id: "", min: "", max: "", required: false, unique: false });
   const [showRelModal, setShowRelModal] = useState(false);
   const [relForm, setRelForm] = useState({ from_column: "", to_table_id: "", to_column: "" });
   const [toColumns, setToColumns] = useState<Column[]>([]);
@@ -51,19 +52,32 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
     loadTables();
   };
 
-  const openNewCol = () => { setColForm({ name: "", type: "string", description: "", enum_type_id: "" }); setShowColModal(true); };
-  const openEditCol = (c: Column) => { setColForm({ id: c.id, name: c.name, type: c.type, description: c.description ?? "", enum_type_id: c.enum_type_id ?? "" }); setShowColModal(true); };
+  const openNewCol = () => { setColForm({ name: "", type: "string", description: "", enum_type_id: "", min: "", max: "", required: false, unique: false }); setShowColModal(true); };
+  const openEditCol = (c: Column) => {
+    const k = c.constraints ?? {};
+    setColForm({ id: c.id, name: c.name, type: c.type, description: c.description ?? "", enum_type_id: c.enum_type_id ?? "", min: k.min != null ? String(k.min) : "", max: k.max != null ? String(k.max) : "", required: !!k.required, unique: !!k.unique });
+    setShowColModal(true);
+  };
 
   const saveCol = async () => {
     if (!selectedId || !colForm.name.trim()) return;
     if (colForm.type === "enum" && !colForm.enum_type_id) return; // enum이면 타입 선택 필수
     const enum_type_id = colForm.type === "enum" ? colForm.enum_type_id : null;
+    // 제약: min/max 는 number 컬럼일 때만, 유효 숫자일 때만 포함. 어떤 필드든 설정되면 객체, 아니면 null(=제약 해제).
+    const k: ColumnConstraint = {};
+    if (colForm.type === "number") {
+      if (colForm.min.trim() !== "" && Number.isFinite(Number(colForm.min))) k.min = Number(colForm.min);
+      if (colForm.max.trim() !== "" && Number.isFinite(Number(colForm.max))) k.max = Number(colForm.max);
+    }
+    if (colForm.required) k.required = true;
+    if (colForm.unique) k.unique = true;
+    const constraints = Object.keys(k).length ? k : null;
     const res = colForm.id
-      ? await fetch("/api/columns", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column_id: colForm.id, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id }) })
-      : await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id }) });
+      ? await fetch("/api/columns", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ column_id: colForm.id, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id, constraints }) })
+      : await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, name: colForm.name, type: colForm.type, description: colForm.description, enum_type_id, constraints }) });
     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? "저장에 실패했습니다."); return; }
     setShowColModal(false);
-    setColForm({ name: "", type: "string", description: "", enum_type_id: "" });
+    setColForm({ name: "", type: "string", description: "", enum_type_id: "", min: "", max: "", required: false, unique: false });
     loadColumns(selectedId);
   };
 
@@ -287,6 +301,31 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
           <div>
             <div className="text-[11px] text-[#9a9aa3] mb-1">설명</div>
             <Input placeholder="선택 사항" value={colForm.description} onChange={(e) => setColForm({ ...colForm, description: e.target.value })} />
+          </div>
+          <div className="border-t border-[#2a2a2f] pt-3">
+            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">제약 조건</div>
+            {colForm.type === "number" && (
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">최솟값 (min)</div>
+                  <Input type="number" placeholder="없음" value={colForm.min} onChange={(e) => setColForm({ ...colForm, min: e.target.value })} />
+                </div>
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">최댓값 (max)</div>
+                  <Input type="number" placeholder="없음" value={colForm.max} onChange={(e) => setColForm({ ...colForm, max: e.target.value })} />
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-[11px] text-[#9a9aa3] cursor-pointer">
+                <input type="checkbox" className="accent-[#7c3aed]" checked={colForm.required} onChange={(e) => setColForm({ ...colForm, required: e.target.checked })} />
+                필수 (required)
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-[#9a9aa3] cursor-pointer">
+                <input type="checkbox" className="accent-[#7c3aed]" checked={colForm.unique} onChange={(e) => setColForm({ ...colForm, unique: e.target.checked })} />
+                고유 (unique)
+              </label>
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Btn onClick={() => setShowColModal(false)}>취소</Btn>

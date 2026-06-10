@@ -15,6 +15,7 @@ interface Table { id: string; name: string; }
 interface Column { id: string; table_id?: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
+interface Violation { row_id: string; column: string; rule: "min" | "max" | "required" | "unique"; value: unknown; message: string; }
 interface EnumType { id: string; name: string; values: string[]; }
 
 export function DataEditor({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: Screen) => void }) {
@@ -24,6 +25,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const grid = useGridState();
   const { rows } = grid;
   const [balance, setBalance] = useState<BalanceResult[]>([]);
+  const [violations, setViolations] = useState<Violation[]>([]);
   const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -64,7 +66,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
-  useEffect(() => { if (selectedId) loadData(selectedId); }, [selectedId]);
+  useEffect(() => { if (selectedId) { loadData(selectedId); runValidate(selectedId); } }, [selectedId]);
 
   // 테이블 전환 시 숨김 컬럼 초기화
   useEffect(() => setHiddenCols(new Set()), [selectedId]);
@@ -294,6 +296,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setBalance(d.results ?? []);
   };
 
+  // 제약 위반 검증. 읽기/편집은 막지 않고 위반 셀을 하이라이트하기 위한 surface 조회.
+  const runValidate = async (tid = selectedId) => {
+    if (!tid) return;
+    try {
+      const res = await fetch("/api/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: tid }) });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setViolations(d.violations ?? []);
+    } catch (e) { console.error(e); }
+  };
+
   // 셀 편집마다 즉시 재분석하지 않고 연속 편집을 모아 한 번만 재계산한다(API 호출 폭주 방지).
   const scheduleBalance = () => {
     if (balanceTimer.current) clearTimeout(balanceTimer.current);
@@ -308,6 +321,18 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     return m;
   }, [balance]);
   const getAnomaly = (rowId: string, col: string) => anomalyMap.get(`${rowId}:${col}`) ?? null;
+
+  // 위반을 (rowId:col) 키로 묶어 셀 렌더 시 O(1) 조회(한 셀에 여러 규칙 위반 가능 → 배열).
+  const violationMap = useMemo(() => {
+    const m = new Map<string, Violation[]>();
+    for (const v of violations) {
+      const key = `${v.row_id}:${v.column}`;
+      const arr = m.get(key);
+      if (arr) arr.push(v); else m.set(key, [v]);
+    }
+    return m;
+  }, [violations]);
+  const getViolations = (rowId: string, col: string) => violationMap.get(`${rowId}:${col}`) ?? null;
 
   const GRADE_VALUES = new Set(["SSR", "SR", "R", "N"]);
   const renderCell = (col: Column, val: unknown) => {
@@ -377,6 +402,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setShowCurve(false);
     loadData(selectedId);
     runBalance();
+    runValidate();
   };
 
   // 검색 필터
@@ -427,6 +453,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     await fetch("/api/snapshots", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore", table_id: selectedId, snapshot_id: snapshotId }) });
     if (selectedId) loadData(selectedId);
     runBalance();
+    runValidate();
   };
 
   // 이상값 전체 보정
@@ -450,6 +477,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     }
     grid.setRows(rows.map((r) => { const data = patches.get(r.id); return data ? { ...r, data } : r; }));
     runBalance();
+    runValidate();
   };
 
   // 차트 데이터 (선택한 Y 컬럼들을 X 기준 정렬해 라인 시리즈로)
@@ -521,6 +549,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               e.target.value = "";
               loadData(selectedId);
               runBalance();
+              runValidate();
             }} />
             <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 border border-[#2a2a2f] rounded-lg text-[11px] w-40 bg-[#16161a] focus-within:border-[#7c3aed]/50">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#3a3a42] flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -589,12 +618,14 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                     <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#4a4a55] text-[11px] text-center">{idx + 1}</td>
                     {visibleColumns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
+                      const cellViolations = getViolations(row.id, c.name);
                       const isEditing = editing?.rowId === row.id && editing?.col === c.name;
                       const cellSelected = isCellSelected(row.id, c.name);
                       return (
                         <td
                           key={c.id}
-                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : ""}`}
+                          title={cellViolations ? cellViolations.map((v) => v.message).join("\n") : undefined}
+                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : cellViolations ? "outline outline-1 -outline-offset-1 outline-[#ef4444] bg-[#ef4444]/10" : ""}`}
                           onClick={(e) => handleCellClick(row.id, c.name, e)}
                           onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}
                         >
@@ -697,7 +728,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               tableName={tables.find((t) => t.id === selectedId)?.name}
               placeholder={`${tables.find((t) => t.id === selectedId)?.name ?? "데이터"}에 할 일을 말해보세요 (Cmd+Enter)`}
               examples={["SSR 캐릭터 3개 추가해줘", "전체 def를 10% 올려줘", "이상값을 권장값으로 보정해줘"]}
-              onDataChanged={() => { if (selectedId) { loadData(selectedId); runBalance(); } }}
+              onDataChanged={() => { if (selectedId) { loadData(selectedId); runBalance(); runValidate(); } }}
             />
           </div>
         ) : (
@@ -764,6 +795,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         {saveState === "saving" && <span className="text-[#9a9aa3]">저장 중…</span>}
         {saveState === "saved" && <span className="text-[#4ade80]">저장됨 ✓</span>}
         <div className="ml-auto flex gap-3">
+          {violations.length > 0 && <span className="text-[#ef4444]">제약 위반 {violations.length}건</span>}
           {totalAnomalies > 0 && <span className="text-[#f87171]">이상값 {totalAnomalies}건</span>}
           {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}
         </div>

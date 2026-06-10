@@ -1,5 +1,6 @@
 import { getDb } from "../client";
 import { newId } from "../../util/ids";
+import type { ColumnConstraint } from "../../validation";
 
 export interface Column {
   id: string;
@@ -9,7 +10,16 @@ export interface Column {
   order_index: number;
   description: string | null;
   enum_type_id: string | null; // type='enum' 일 때 enum_types.id 참조
+  constraints: ColumnConstraint | null; // min/max/required/unique. NULL=제약 없음
   created_at: number;
+}
+
+// DB의 원본 행 형태(constraints가 JSON 문자열). SELECT 결과 캐스팅용.
+type ColumnRow = Omit<Column, "constraints"> & { constraints: string | null };
+
+// 원본 행 → Column. constraints JSON 파싱(없으면 null).
+function parseColumn(row: ColumnRow): Column {
+  return { ...row, constraints: row.constraints ? (JSON.parse(row.constraints) as ColumnConstraint) : null };
 }
 
 // 기존 DB 호환: enum_type_id 컬럼이 없고 type CHECK 제약이 걸린 구버전이면
@@ -39,14 +49,20 @@ function ensure() {
     });
     migrate();
   }
+  // additive: constraints 컬럼이 없으면 추가(ALTER ADD only — 재생성 금지, 실데이터 보존).
+  // 위 enum_type_id 재생성 후에는 info가 stale 하므로 다시 조회한다.
+  const info2 = db.prepare("PRAGMA table_info(columns)").all() as { name: string }[];
+  if (info2.length && !info2.some((c) => c.name === "constraints")) {
+    db.exec("ALTER TABLE columns ADD COLUMN constraints TEXT");
+  }
   ensured = true;
 }
 
 export function listColumns(tableId: string): Column[] {
   ensure();
-  return getDb()
+  return (getDb()
     .prepare("SELECT * FROM columns WHERE table_id = ? ORDER BY order_index, name")
-    .all(tableId) as Column[];
+    .all(tableId) as ColumnRow[]).map(parseColumn);
 }
 
 export function addColumn(data: {
@@ -56,6 +72,7 @@ export function addColumn(data: {
   description?: string;
   order_index?: number;
   enum_type_id?: string | null;
+  constraints?: ColumnConstraint | null;
 }): Column {
   ensure();
   const db = getDb();
@@ -64,10 +81,11 @@ export function addColumn(data: {
   if (dup) throw new Error(`이미 '${data.name}' 컬럼이 존재합니다.`);
   const id = newId();
   const now = Date.now();
+  const constraintsJson = data.constraints != null ? JSON.stringify(data.constraints) : null;
   db.prepare(
-    "INSERT INTO columns (id, table_id, name, type, order_index, description, enum_type_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, data.table_id, data.name, data.type, data.order_index ?? 0, data.description ?? null, data.enum_type_id ?? null, now);
-  return db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as Column;
+    "INSERT INTO columns (id, table_id, name, type, order_index, description, enum_type_id, constraints, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, data.table_id, data.name, data.type, data.order_index ?? 0, data.description ?? null, data.enum_type_id ?? null, constraintsJson, now);
+  return parseColumn(db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as ColumnRow);
 }
 
 // enum 타입을 참조하는 컬럼 수 (삭제 가드용)
@@ -80,11 +98,12 @@ export function countColumnsUsingEnum(enumTypeId: string): number {
 // 타입 변경은 메타데이터만 바꾸며 기존 값은 보존한다(강제 변환하지 않음).
 export function updateColumn(
   id: string,
-  patch: { name?: string; type?: Column["type"]; enum_type_id?: string | null; description?: string | null }
+  patch: { name?: string; type?: Column["type"]; enum_type_id?: string | null; description?: string | null; constraints?: ColumnConstraint | null }
 ): Column {
   ensure();
   const db = getDb();
-  const cur = db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as Column | undefined;
+  // cur 는 constraints 가 원본 JSON 문자열인 raw 행. 미지정 시 그대로 통과시켜 재인코딩을 피한다.
+  const cur = db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as ColumnRow | undefined;
   if (!cur) throw new Error("컬럼을 찾을 수 없습니다.");
 
   const newName = patch.name?.trim() || cur.name;
@@ -100,10 +119,12 @@ export function updateColumn(
   const newType = patch.type ?? cur.type;
   const newEnumTypeId = newType === "enum" ? (patch.enum_type_id ?? cur.enum_type_id ?? null) : null;
   const newDesc = patch.description !== undefined ? patch.description : cur.description;
+  // 미지정 시 cur.constraints(원본 문자열)를 그대로 보존(재인코딩 금지). 지정 시 stringify.
+  const newConstraints = patch.constraints !== undefined ? (patch.constraints != null ? JSON.stringify(patch.constraints) : null) : cur.constraints;
 
   const tx = db.transaction(() => {
-    db.prepare("UPDATE columns SET name = ?, type = ?, enum_type_id = ?, description = ? WHERE id = ?")
-      .run(newName, newType, newEnumTypeId, newDesc, id);
+    db.prepare("UPDATE columns SET name = ?, type = ?, enum_type_id = ?, description = ?, constraints = ? WHERE id = ?")
+      .run(newName, newType, newEnumTypeId, newDesc, newConstraints, id);
     if (newName !== cur.name) {
       const rows = db.prepare("SELECT id, data FROM rows WHERE table_id = ?").all(cur.table_id) as { id: string; data: string }[];
       const upd = db.prepare("UPDATE rows SET data = ?, updated_at = ? WHERE id = ?");
@@ -119,7 +140,7 @@ export function updateColumn(
     }
   });
   tx();
-  return db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as Column;
+  return parseColumn(db.prepare("SELECT * FROM columns WHERE id = ?").get(id) as ColumnRow);
 }
 
 // 주어진 순서대로 order_index 재부여

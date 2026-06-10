@@ -4,6 +4,16 @@ import { createTable, deleteTable, listTables } from "../../db/repo/tables.js";
 import { addColumn, listColumns, removeColumn, updateColumn } from "../../db/repo/columns.js";
 import { ok } from "./respond.js";
 
+// 컬럼 제약(min/max/required/unique). validation/index.ts ColumnConstraint 미러.
+const constraintSchema = z
+  .object({
+    min: z.number().optional(),
+    max: z.number().optional(),
+    required: z.boolean().optional(),
+    unique: z.boolean().optional(),
+  })
+  .optional();
+
 export function registerTableHandlers(server: McpServer) {
   // ── Tables ──
   server.tool(
@@ -42,19 +52,19 @@ export function registerTableHandlers(server: McpServer) {
   // ── Columns ──
   server.tool(
     "add_column",
-    "컬럼 추가. type='enum'이면 enum_type_id(enum_types.id) 필수",
-    { table_id: z.string(), name: z.string(), type: z.enum(["string", "number", "boolean", "enum"]), description: z.string().optional(), enum_type_id: z.string().optional() },
-    async ({ table_id, name, type, description, enum_type_id }) => {
+    "컬럼 추가. type='enum'이면 enum_type_id(enum_types.id) 필수. constraints로 min/max/required/unique 지정 가능",
+    { table_id: z.string(), name: z.string(), type: z.enum(["string", "number", "boolean", "enum"]), description: z.string().optional(), enum_type_id: z.string().optional(), constraints: constraintSchema },
+    async ({ table_id, name, type, description, enum_type_id, constraints }) => {
       const existing = listColumns(table_id);
-      return ok(addColumn({ table_id, name, type, description, enum_type_id, order_index: existing.length }));
+      return ok(addColumn({ table_id, name, type, description, enum_type_id, constraints, order_index: existing.length }));
     }
   );
 
   server.tool(
     "update_column",
-    "컬럼 수정. 이름 변경 시 모든 행의 데이터 키도 함께 변경됨. type='enum'이면 enum_type_id 필요",
-    { column_id: z.string(), name: z.string().optional(), type: z.enum(["string", "number", "boolean", "enum"]).optional(), enum_type_id: z.string().optional(), description: z.string().optional() },
-    async ({ column_id, name, type, enum_type_id, description }) => ok(updateColumn(column_id, { name, type, enum_type_id, description }))
+    "컬럼 수정. 이름 변경 시 모든 행의 데이터 키도 함께 변경됨. type='enum'이면 enum_type_id 필요. constraints로 min/max/required/unique 지정 가능",
+    { column_id: z.string(), name: z.string().optional(), type: z.enum(["string", "number", "boolean", "enum"]).optional(), enum_type_id: z.string().optional(), description: z.string().optional(), constraints: constraintSchema },
+    async ({ column_id, name, type, enum_type_id, description, constraints }) => ok(updateColumn(column_id, { name, type, enum_type_id, description, constraints }))
   );
 
   server.tool(

@@ -11,6 +11,7 @@ import { registerCurveHandlers } from "./handlers/curve-handler.js";
 import { registerEnumHandlers } from "./handlers/enum-handler.js";
 import { registerMemoryHandlers } from "./handlers/memory-handler.js";
 import { registerSnapshotHandlers } from "./handlers/snapshot-handler.js";
+import { registerValidateHandlers } from "./handlers/validate-handler.js";
 
 const server = new McpServer({ name: "game-data-studio", version: "1.0.0" });
 
@@ -26,6 +27,7 @@ registerCurveHandlers(server);
 registerEnumHandlers(server);
 registerMemoryHandlers(server);
 registerSnapshotHandlers(server);
+registerValidateHandlers(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

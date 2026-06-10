@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS columns (
   order_index  INTEGER NOT NULL DEFAULT 0,
   description  TEXT,
   enum_type_id TEXT,                     -- type='enum' 일 때 enum_types.id 참조
+  constraints  TEXT,                     -- ColumnConstraint JSON (min/max/required/unique). NULL=제약 없음
   created_at   INTEGER NOT NULL
 );
 
