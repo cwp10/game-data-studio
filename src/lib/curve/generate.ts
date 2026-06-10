@@ -1,5 +1,5 @@
 // 레벨 1..count 의 성장 곡선 값 계산 (게임 데이터 자동 생성용)
-export type CurveType = "linear" | "power" | "exponential";
+export type CurveType = "linear" | "power" | "exponential" | "logarithmic" | "quadratic";
 
 export interface CurveParams {
   type: CurveType;
@@ -16,6 +16,8 @@ export function computeCurve(p: CurveParams): number[] {
     let v: number;
     if (p.type === "linear") v = p.base + p.factor * (level - 1);
     else if (p.type === "power") v = p.base * Math.pow(level, p.factor);
+    else if (p.type === "logarithmic") v = p.base + p.factor * Math.log(level); // level=1 → ln1=0 → base
+    else if (p.type === "quadratic") v = p.base + p.factor * (level - 1) ** 2; // level=1 → base
     else v = p.base * Math.pow(p.factor, level - 1); // exponential
     out.push(p.round === false ? v : Math.round(v));
   }

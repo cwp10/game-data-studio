@@ -23,4 +23,13 @@ describe("computeCurve", () => {
     expect(computeCurve({ type: "linear", base: 1, factor: 1, count: 0 })).toEqual([]);
     expect(computeCurve({ type: "linear", base: 1, factor: 1, count: 20000 }).length).toBe(10000);
   });
+
+  it("quadratic: base + factor*(L-1)² (level=1 → base, L=3 base=100 f=5 → 120)", () => {
+    expect(computeCurve({ type: "quadratic", base: 100, factor: 5, count: 3 })).toEqual([100, 105, 120]);
+  });
+
+  it("logarithmic: base + factor*ln(L) (level=1 → base, L=3 base=100 f=10 → round 111)", () => {
+    expect(computeCurve({ type: "logarithmic", base: 100, factor: 10, count: 3 })).toEqual([100, 107, 111]);
+    expect(computeCurve({ type: "logarithmic", base: 100, factor: 10, count: 3, round: false })[2]).toBeCloseTo(110.986, 2);
+  });
 });
