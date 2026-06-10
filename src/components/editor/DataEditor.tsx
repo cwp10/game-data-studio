@@ -5,7 +5,7 @@ import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Selec
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
-import { useGridState, type Row } from "@/components/editor/useGridState";
+import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
 const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
@@ -27,6 +27,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  // 셀 선택(복붙용). selectedRowIds(행 선택, 삭제용)와 완전 분리·공존. activeCell=시작, anchorCell=범위 반대편.
+  const [activeCell, setActiveCell] = useState<{ rowId: string; col: string } | null>(null);
+  const [anchorCell, setAnchorCell] = useState<{ rowId: string; col: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [showColToggle, setShowColToggle] = useState(false);
@@ -150,7 +153,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   const saveCell = async (row: Row, col: string, val: string) => {
     const col_ = columns.find((c) => c.name === col);
-    const parsed = col_?.type === "number" ? (isNaN(Number(val)) ? val : Number(val)) : val;
+    const parsed = col_ ? coerce(col_.type, val) : val;
     const before = row.data[col];
     const newData = { ...row.data, [col]: parsed };
     const ok = await postRow(row.id, newData);
@@ -160,41 +163,119 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     scheduleBalance();
   };
 
+  // 그룹(CellCmd[])을 rowId로 묶어 행별 full data 조립 → 행당 1 POST 루프.
+  // ⚠️ 같은 행 여러 셀을 셀당 POST하면 서로 덮어써 마지막만 남으므로 반드시 행 단위로 합쳐 POST.
+  const postGroup = async (group: CellCmd[], dir: "before" | "after"): Promise<boolean> => {
+    const byRow = new Map<string, Record<string, unknown>>();
+    for (const c of group) {
+      const base = byRow.get(c.rowId) ?? grid.rows.find((r) => r.id === c.rowId)?.data;
+      if (!base) continue;
+      byRow.set(c.rowId, { ...base, [c.col]: c[dir] });
+    }
+    if (byRow.size === 0) return false;
+    let ok = true;
+    for (const [id, data] of byRow) { if (!(await postRow(id, data))) ok = false; }
+    return ok;
+  };
+
   // Undo/Redo: reducer는 순수하므로 DB 라운드트립(POST)을 컴포넌트에서 처리. 성공 시에만 dispatch.
   const handleUndo = async () => {
-    const cmd = grid.undoTop;
-    if (!cmd) return;
-    const row = grid.rows.find((r) => r.id === cmd.rowId);
-    if (!row) return;
-    const newData = { ...row.data, [cmd.col]: cmd.before };
-    const ok = await postRow(cmd.rowId, newData);
-    if (!ok) return;
+    const group = grid.undoTop;
+    if (!group) return;
+    if (!(await postGroup(group, "before"))) return;
     grid.undo();
     scheduleBalance();
   };
   const handleRedo = async () => {
-    const cmd = grid.redoTop;
-    if (!cmd) return;
-    const row = grid.rows.find((r) => r.id === cmd.rowId);
-    if (!row) return;
-    const newData = { ...row.data, [cmd.col]: cmd.after };
-    const ok = await postRow(cmd.rowId, newData);
-    if (!ok) return;
+    const group = grid.redoTop;
+    if (!group) return;
+    if (!(await postGroup(group, "after"))) return;
     grid.redo();
     scheduleBalance();
   };
 
+  // 셀 클릭: activeCell만 설정(이벤트는 tr로 버블 → 기존 행 선택 동작 보존). shift+클릭 = 범위 확장.
+  const handleCellClick = (rowId: string, col: string, e: React.MouseEvent) => {
+    if (e.shiftKey && activeCell) {
+      setAnchorCell({ rowId, col });
+    } else {
+      setActiveCell({ rowId, col });
+      setAnchorCell(null);
+    }
+  };
+
+  // activeCell~anchorCell 사각형 범위를 화면상의 filteredRows·visibleColumns idx로 환산.
+  const selectionRange = (): { r0: number; r1: number; c0: number; c1: number } | null => {
+    if (!activeCell) return null;
+    const ri = (id: string) => filteredRows.findIndex((r) => r.id === id);
+    const ci = (name: string) => visibleColumns.findIndex((c) => c.name === name);
+    const ar = ri(activeCell.rowId), ac = ci(activeCell.col);
+    if (ar < 0 || ac < 0) return null;
+    const br = anchorCell ? ri(anchorCell.rowId) : ar;
+    const bc = anchorCell ? ci(anchorCell.col) : ac;
+    if (anchorCell && (br < 0 || bc < 0)) return { r0: ar, r1: ar, c0: ac, c1: ac };
+    return { r0: Math.min(ar, br), r1: Math.max(ar, br), c0: Math.min(ac, bc), c1: Math.max(ac, bc) };
+  };
+
+  const isCellSelected = (rowId: string, col: string): boolean => {
+    const range = selectionRange();
+    if (!range) return false;
+    const r = filteredRows.findIndex((x) => x.id === rowId);
+    const c = visibleColumns.findIndex((x) => x.name === col);
+    return r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1;
+  };
+
+  // Ctrl+C: 선택 범위(없으면 activeCell 단일)를 TSV로 클립보드 복사.
+  const copySelection = async () => {
+    const range = selectionRange();
+    if (!range) return;
+    const tsv = cellsToTSV(filteredRows, visibleColumns, range);
+    try { await navigator.clipboard.writeText(tsv); } catch (e) { console.error(e); }
+  };
+
+  // Ctrl+V: 클립보드 TSV를 activeCell 기준으로 매핑 → 행당 1 POST → grid.batchUpdate(1 undo 엔트리).
+  const pasteSelection = async () => {
+    if (!activeCell) return;
+    let tsv: string;
+    try { tsv = await navigator.clipboard.readText(); } catch (e) { console.error(e); return; }
+    if (!tsv) return;
+    const anchorRowIndex = filteredRows.findIndex((r) => r.id === activeCell.rowId);
+    const anchorColIndex = visibleColumns.findIndex((c) => c.name === activeCell.col);
+    if (anchorRowIndex < 0 || anchorColIndex < 0) return;
+    const cmds = tsvToCommands(tsv, { rowIndex: anchorRowIndex, colIndex: anchorColIndex }, filteredRows, visibleColumns);
+    if (cmds.length === 0) return;
+    if (!(await postGroup(cmds, "after"))) return;
+    grid.batchUpdate(cmds);
+    scheduleBalance();
+  };
+
   // 단축키 핸들러를 ref에 보관(매 렌더 갱신)해 stale closure 없이 [] deps 리스너에서 최신 값 호출.
-  const shortcutRef = useRef({ handleUndo, handleRedo, editing });
-  shortcutRef.current = { handleUndo, handleRedo, editing };
+  const shortcutRef = useRef({ handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell });
+  shortcutRef.current = { handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell };
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z" && e.key.toLowerCase() !== "y") return;
+      const k = e.key.toLowerCase();
+      const isUndoRedo = (e.metaKey || e.ctrlKey) && (k === "z" || k === "y");
+      const isCopy = (e.metaKey || e.ctrlKey) && k === "c";
+      const isPaste = (e.metaKey || e.ctrlKey) && k === "v";
+      if (!isUndoRedo && !isCopy && !isPaste) return;
       // 가드: 셀 편집 중이거나 입력 요소에 포커스가 있으면(채팅·검색) 브라우저 기본 동작 우선.
       const el = document.activeElement;
       const tag = el?.tagName.toLowerCase();
       if (shortcutRef.current.editing !== null || tag === "input" || tag === "textarea" || tag === "select") return;
-      const isRedo = e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey);
+      if (isCopy) {
+        if (!shortcutRef.current.activeCell) return;
+        e.preventDefault();
+        shortcutRef.current.copySelection();
+        return;
+      }
+      if (isPaste) {
+        if (!shortcutRef.current.activeCell) return;
+        e.preventDefault();
+        shortcutRef.current.pasteSelection();
+        return;
+      }
+      const isRedo = k === "y" || (k === "z" && e.shiftKey);
       e.preventDefault();
       if (isRedo) shortcutRef.current.handleRedo(); else shortcutRef.current.handleUndo();
     };
@@ -497,8 +578,14 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                     {visibleColumns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
                       const isEditing = editing?.rowId === row.id && editing?.col === c.name;
+                      const cellSelected = isCellSelected(row.id, c.name);
                       return (
-                        <td key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap" onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}>
+                        <td
+                          key={c.id}
+                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : ""}`}
+                          onClick={(e) => handleCellClick(row.id, c.name, e)}
+                          onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}
+                        >
                           {isEditing && c.type === "enum" ? (
                             <select
                               autoFocus
