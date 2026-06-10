@@ -1,8 +1,29 @@
 # Game Data Studio 전면 고도화 계획
 
-> 작성일: 2026-06-10 · 기존 「시뮬레이션 기획」을 흡수·대체한 통합 고도화 계획
-> 근거: indiebalancing(velog @dj258255 7편) 분석 — 원문 출처·설문 차트 실측은 `docs/research/indiebalancing/`(SOURCES.md·SURVEY-DATA.md)
+> 작성일: 2026-06-10 · 최종 업데이트: 2026-06-11
+> 근거: indiebalancing(velog @dj258255 7편) 분석 — 설문 실측 데이터는 `docs/research/indiebalancing/SURVEY-DATA.md`
 > 결정: **RPG 전용 온보딩(Phase 0)** → 에디터 UX(Phase 1) → 밸런싱/시뮬(Phase 2). 시뮬은 **네이티브 엔진 주력 + 장르별 특화**
+
+---
+
+## 현재 상태 (2026-06-11)
+
+| Phase | 항목 | 상태 |
+|-------|------|------|
+| Phase 0 | RPG 온보딩 재편 (P0-1~P0-4) | ✅ 완료 |
+| Phase 1 | 에디터 UX 고도화 (P1-0~P1-5) | ✅ 완료 |
+| Phase 2 | 밸런싱/시뮬 전체 (P2-1~P2-10) | ✅ 완료 |
+| P3-1 | AI 밸런싱 리포트 (BalancePanel + `/api/chat` 브리지) | ✅ 완료 |
+| P3-2 | 데이터 유효성·FK 무결성 | ✅ 완료 |
+| P3-3 | JSON export | ✅ 완료 |
+| P3-4-E | 곡선 확장(logarithmic·quadratic) + fit.ts | ✅ 완료 |
+| P3-4-F | 버전 히스토리 diff (스냅샷 비교) | ✅ 완료 |
+| P3-4 S-Curve | S-Curve(로지스틱) 6번째 곡선 유형 | ✅ 완료 |
+| P3-5 | 수치 근거 메모 (annotations) | ✅ 완료 |
+| **P3-4-G** | **xlsx import + 다국어 텍스트 테이블** | ⬜ 미완료 |
+| **P3-6** | **레퍼런스 데이터셋 (장르별 표준 수치)** | ⬜ 미완료 |
+
+> 현재 테스트: 205 passes · tsc 0 · 최신 커밋: `dff3fa4a`
 
 ---
 
@@ -290,42 +311,45 @@ velog 시리즈 7편(@dj258255)은 **"indiebalancing"** — 우리 Game Data Stu
 
 ---
 
-## 11. Phase 3 — 추가 기능 (보류 티어, deferred)
+## 11. Phase 3 — 추가 기능
 
-> **critical path 미접촉**: Phase 0/1/2가 완료·안정화된 뒤 진행한다. 여기 항목들은 Phase 0/1/2 안에 끼워넣지 않는다(스코프 보호). 우선순위: P3-1·P3-2 > P3-3 > P3-4.
+> Phase 0/1/2 전체 완료. Phase 3 대부분 구현 완료 — 미완료 항목은 **P3-4-G, P3-6** 2개.
 
-### P3-1. AI 밸런싱 제안 강화 (moat 차별화) — ⭐
-- **현황(이미 일부 구현)**: `DataEditor.tsx:182`가 z-score 최고 이상값 1건을 "AI 제안"으로 표시, `applyRecommended`(단건)·`applyAllAnomalies`(전체)로 보정. 단 실제 로직은 **통계 평균(mean) 보정** 수준이고 챗 브리지(실제 Claude)와 분리됨.
-- **확장**: `analyze_balance` 결과를 **챗 브리지(`/api/chat`, 실제 Claude+MCP)에 넘겨 장르·관계 맥락을 반영한 수정안·리포트** 생성. "왜 이 값이 이상한지 + 장르 표준 대비 + 권장 범위"를 서술. 챗 예시 "이상값을 권장값으로 보정해줘"(`DataEditor.tsx:525`) 이미 존재 → 그 위에 구조화.
-- **파일**: `src/components/balance/BalancePanel.tsx`, `DataEditor.tsx`(balance 탭), `/api/chat`. 신규: balance→AI 리포트 프롬프트 빌더. **indiebalancing 명시 약점("AI 자동 밸런싱 없음")의 정면 차별화.**
+### ✅ P3-1. AI 밸런싱 리포트 (완료)
+- `analyze_balance` 결과 → `promptBuilder.ts` → `/api/chat` SSE 스트림 → BalancePanel "AI 리포트" 버튼.
 
-### P3-2. 데이터 유효성·FK 무결성 — ⭐ (가장 GDS다운 갭)
-- **현황**: 컬럼은 타입만(string/number/boolean/enum). 관계는 `set_relation`으로 정의되나 **무결성 강제 없음**.
-- **확장**:
-  - **컬럼 제약**: min/max·required·unique 메타 추가 → `upsert_row` 시 검증, 위반 셀 하이라이트(이상값 하이라이트 패턴 재사용).
-  - **FK 무결성**: 깨진 참조(존재하지 않는 id 참조) 검출 리포트, 행 삭제 시 **참조하는 행 경고**.
-- **파일**: 컬럼 스키마(`src/lib/db/repo/columns.ts`), `upsert_row`/`delete_row` 핸들러, 신규 `src/lib/validation/` 코어+test. UI: 제약 입력(SchemaEditor) + 위반 경고. **다대다 RPG 스키마(§12 부록)의 데이터 품질 확보.**
+### ✅ P3-2. 데이터 유효성·FK 무결성 (완료)
+- 컬럼 제약(min/max·required·unique) + 위반 셀 하이라이트. FK 깨진 참조 검출 + 행 삭제 경고.
+- 파일: `src/lib/validation/`, `src/lib/db/repo/columns.ts`, `SchemaEditor.tsx`, `DataEditor.tsx`.
 
-### P3-3. JSON 데이터 export
-- **현황**: CSV export는 이미 존재(`/api/csv`).
-- **추가**: 테이블 데이터를 **JSON 배열로 export**(코드 아님, 데이터만). 엔진·외부 투입용.
-- **파일**: `src/app/api/csv/route.ts` 확장(format 파라미터) 또는 신규 export 라우트. UI: DataEditor export 버튼에 JSON 옵션.
+### ✅ P3-3. JSON 데이터 export (완료)
+- `/api/csv?format=json` — 테이블 데이터 JSON 배열 export. DataEditor export 버튼에 JSON 옵션.
 
-### P3-4. 보조 묶음 (E·F·G)
-- **E. 곡선 종류 확장 + 곡선 피팅**(설문 곡선 5종 표·주관식 근거):
-  - ① `generate.ts`에 **Logarithmic·Quadratic·S-Curve 추가**(현재 linear/power/exponential 3종) + **구간별 복합곡선**(예: 초반 linear→후반 exponential). 곡선별 RPG 용처는 `docs/research/indiebalancing/SURVEY-DATA.md` 참조(예: Exponential=MMO 경험치·강화, Quadratic=스킬 데미지).
-  - ② **곡선 피팅(freehand→수식)**: 찍은 점들 → 최소제곱으로 파라미터 추정(주관식 "그래프 그리면 구간별 수식화" 수요). Goal Solver(P2-6)와 짝. 신규 `src/lib/curve/fit.ts` + test.
-- **F. 버전 히스토리 diff**: 기존 스냅샷(`/api/snapshots`) 간 변경 행/셀 비교 뷰.
-- **G. xlsx import / 다국어 텍스트 테이블**: import 포맷 확장(xlsx), RPG 현지화 텍스트 테이블 패턴.
+### ✅ P3-4-E. 곡선 확장 + 피팅 (완료)
+- `generate.ts`: logarithmic·quadratic·s_curve(로지스틱) 추가 (총 6종). 파라미터: range/rate/midpoint.
+- `fit.ts`: 전 6종 닫힌형 OLS/logit 선형화. `solve.ts`: s_curve early return(unsupported).
+- DataEditor 모달: 타입별 입력 분기, 역산 disable, 피팅 결과 반영.
+- 곡선별 RPG 용처: `docs/research/indiebalancing/SURVEY-DATA.md` 참조.
 
-### P3-5. 수치 근거 메모/주석 (설문 갭) — "왜 이 수치인지 까먹음" 50%
-- **무엇**: 컬럼/행/셀에 **결정 근거 메모**를 기록 → 시간이 지나도 수치 의도 추적. 설문 2위 페인(50%)인데 현 PLAN에 없던 갭.
-- **설계**: 셀/행 메타에 `note` 또는 별도 `annotations` 테이블. 우리 **프로젝트 메모리(`get/update_project_memory`)와 연계** 가능(우리 moat 활용).
-- **파일**: 컬럼/행 repo + UI(셀 우클릭/패널 메모). 이상값 하이라이트 패턴 재사용.
+### ✅ P3-4-F. 버전 히스토리 diff (완료)
+- `src/lib/snapshot/diff.ts`: 두 스냅샷 간 added/removed/changed 행 비교.
+- DataEditor GitCompare 버튼 → 색상 코딩 diff 모달.
 
-### P3-6. 레퍼런스 데이터셋 (설문 주관식 "다른 게임 수치 레퍼런스" 2회)
+### ✅ P3-5. 수치 근거 메모 (완료)
+- `annotations` 테이블 + API + MCP(`add_annotation`/`get_annotations`/`delete_annotation`).
+- DataEditor: 행별 StickyNote 아이콘 → 메모 모달.
+
+---
+
+### ⬜ P3-4-G. xlsx import + 다국어 텍스트 테이블 (미완료)
+- **무엇**: import 포맷 확장(xlsx), RPG 현지화 텍스트 테이블 패턴.
+- **주의**: xlsx 파싱은 외부 라이브러리(xlsx/exceljs) 필요 — 의존성 추가 0 원칙과 충돌. 구현 전 접근법 결정 필요.
+- **파일**: `/api/csv` 확장 또는 신규 route. DataEditor import 버튼에 xlsx 옵션.
+
+### ⬜ P3-6. 레퍼런스 데이터셋 (미완료)
 - **무엇**: 장르별 **표준 수치 예시(유명 게임 벤치마크)** 제공 → 신규 기획 시 비교 기준. RPG 6종 템플릿(§12 부록)과 연계.
-- **파일**: 시드 데이터 또는 `docs/` 레퍼런스. 신규 프로젝트 scaffold 시 참고값 주입.
+- **성격**: 코드보다 데이터·문서 작업. 시드 데이터 JSON 또는 `docs/` 레퍼런스 + scaffold 시 참고값 주입.
+- **파일**: `data/reference/` 또는 `docs/reference/`. 신규 프로젝트 scaffold API에 참고값 연결.
 
 ### 보류·제외 메모
 - **엔진 C# 코드 생성**: **나중에 결정**(JSON/CSV 데이터 export로 충분한지 검증 후 판단). 기존 「시뮬레이션 기획」의 "C# 출력 불필요" 입장 유지하며, 변경 시 명시 결정.
