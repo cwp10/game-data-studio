@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listSnapshots, createSnapshot, deleteSnapshot } from "@/lib/db/repo/snapshots";
 import { readRows, upsertRow, deleteRow } from "@/lib/db/repo/rows";
+import { diffSnapshots } from "@/lib/snapshot/diff";
 
 export async function GET(req: NextRequest) {
   const tableId = req.nextUrl.searchParams.get("table_id");
@@ -10,6 +11,21 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+  if (body.action === "diff") {
+    const { table_id, snapshot_a_id, snapshot_b_id } = body;
+    const snaps = listSnapshots(table_id);
+    const snapA = snaps.find((s) => s.id === snapshot_a_id);
+    const snapB = snaps.find((s) => s.id === snapshot_b_id);
+    if (!snapA || !snapB) return NextResponse.json({ error: "snapshot not found" }, { status: 404 });
+    const rowsA = JSON.parse(snapA.data);
+    const rowsB = JSON.parse(snapB.data);
+    const diff = diffSnapshots(rowsA, rowsB);
+    return NextResponse.json({
+      snapshotA: { id: snapA.id, name: snapA.name, created_at: snapA.created_at },
+      snapshotB: { id: snapB.id, name: snapB.name, created_at: snapB.created_at },
+      diff,
+    });
+  }
   if (body.action === "restore") {
     const { table_id, snapshot_id } = body;
     const snap = listSnapshots(table_id).find((s) => s.id === snapshot_id);
