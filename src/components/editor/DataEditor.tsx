@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2 } from "lucide-react";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2, StickyNote } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
@@ -59,6 +59,11 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const fileRef = useRef<HTMLInputElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickedRowRef = useRef<string | null>(null);
+  // annotations (수치 근거 메모): row_id별 메모 목록. 행 우측 StickyNote 아이콘 + 모달.
+  const [annotationsByRow, setAnnotationsByRow] = useState<Map<string, { id: string; note: string; column_name: string | null }[]>>(new Map());
+  const [annotationTarget, setAnnotationTarget] = useState<{ rowId: string } | null>(null);
+  const [noteInput, setNoteInput] = useState("");
+  const [annotationLoading, setAnnotationLoading] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -71,9 +76,27 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   ]);
   const enumValuesFor = (col: Column): string[] => enumTypes.find((e) => e.id === col.enum_type_id)?.values ?? [];
 
+  // 메모 로드: 테이블 전체 annotation 조회 → row_id별 Map. row_id 없는(테이블/컬럼 수준) 항목은 제외.
+  const loadAnnotations = async () => {
+    if (!selectedId) { setAnnotationsByRow(new Map()); return; }
+    try {
+      const data: { id: string; row_id: string | null; column_name: string | null; note: string }[] =
+        await fetch(`/api/annotations?table_id=${selectedId}`).then((r) => r.json());
+      const map = new Map<string, { id: string; note: string; column_name: string | null }[]>();
+      for (const a of data) {
+        if (!a.row_id) continue;
+        const arr = map.get(a.row_id) ?? [];
+        arr.push({ id: a.id, note: a.note, column_name: a.column_name });
+        map.set(a.row_id, arr);
+      }
+      setAnnotationsByRow(map);
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
   useEffect(() => { if (selectedId) { loadData(selectedId); runValidate(selectedId); runFkCheck(); } }, [selectedId]);
+  useEffect(() => { loadAnnotations(); }, [selectedId]);
 
   // 테이블 전환 시 숨김 컬럼 초기화
   useEffect(() => setHiddenCols(new Set()), [selectedId]);
@@ -662,6 +685,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                   {visibleColumns.map((c) => (
                     <th key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-left text-[11px] font-medium text-[#6b6b77] whitespace-nowrap">{c.name}</th>
                   ))}
+                  <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] w-7" />
                 </tr>
               </thead>
               <tbody>
@@ -726,11 +750,25 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                         </td>
                       );
                     })}
+                    {(() => {
+                      const hasNote = (annotationsByRow.get(row.id) ?? []).length > 0;
+                      return (
+                        <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-center w-7">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAnnotationTarget({ rowId: row.id }); setNoteInput(""); }}
+                            className={`p-1 rounded hover:bg-[#2a2a2f] transition-colors ${hasNote ? "text-[#c4b5fd]" : "text-[#3a3a42]"}`}
+                            title={hasNote ? "메모 있음" : "메모 추가"}
+                          >
+                            <StickyNote size={12} />
+                          </button>
+                        </td>
+                      );
+                    })()}
                   </tr>
                 ))}
                 {!searchQuery && (
                   <tr className="hover:bg-[#1e1e24] cursor-pointer" onClick={addRow}>
-                    <td colSpan={visibleColumns.length + 1} className="px-2.5 py-2.5 text-center text-[11px] text-[#4a4a55] hover:text-[#6b6b77]">
+                    <td colSpan={visibleColumns.length + 2} className="px-2.5 py-2.5 text-center text-[11px] text-[#4a4a55] hover:text-[#6b6b77]">
                       <Plus size={11} className="inline -mt-px mr-1" />행 추가
                     </td>
                   </tr>
@@ -993,6 +1031,54 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             <Btn variant="primary" onClick={runCurve} disabled={!curve.value_column.trim() || curvePreview.length === 0}><TrendingUp size={11} />생성</Btn>
           </div>
         </div>
+      </Modal>
+
+      {/* 수치 근거 메모 모달 (P3-5): 선택 행의 메모 목록 + 새 메모 입력. surface-not-block. */}
+      <Modal open={!!annotationTarget} onClose={() => setAnnotationTarget(null)} title="수치 근거 메모">
+        {annotationTarget && (
+          <>
+            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+              {(annotationsByRow.get(annotationTarget.rowId) ?? []).map((a) => (
+                <div key={a.id} className="flex items-start gap-2 bg-[#1e1e24] rounded p-2.5">
+                  <p className="flex-1 text-[12px] text-[#ededed] whitespace-pre-wrap">{a.note}</p>
+                  <button
+                    onClick={async () => {
+                      await fetch("/api/annotations", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: a.id }) });
+                      await loadAnnotations();
+                    }}
+                    className="text-[#6b6b77] hover:text-[#f87171] text-[10px] flex-shrink-0"
+                  >삭제</button>
+                </div>
+              ))}
+              {(annotationsByRow.get(annotationTarget.rowId) ?? []).length === 0 && (
+                <p className="text-[11px] text-[#4a4a55]">등록된 메모가 없습니다.</p>
+              )}
+            </div>
+            <textarea
+              value={noteInput}
+              onChange={(e) => setNoteInput(e.target.value)}
+              placeholder="이 행의 수치를 결정한 근거를 기록하세요..."
+              className="w-full bg-[#1e1e24] border border-[#2a2a2f] rounded text-[12px] text-[#ededed] p-2.5 resize-none h-20 focus:outline-none focus:border-[#7c3aed]"
+            />
+            <div className="flex justify-end gap-2 mt-3">
+              <Btn onClick={() => setAnnotationTarget(null)}>닫기</Btn>
+              <Btn variant="primary" disabled={!noteInput.trim() || annotationLoading} onClick={async () => {
+                if (!selectedId) return;
+                setAnnotationLoading(true);
+                try {
+                  await fetch("/api/annotations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ project_id: projectId, table_id: selectedId, row_id: annotationTarget.rowId, note: noteInput.trim() }),
+                  });
+                  setNoteInput("");
+                  await loadAnnotations();
+                } catch (e) { console.error(e); }
+                setAnnotationLoading(false);
+              }}>저장</Btn>
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );
