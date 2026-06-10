@@ -20,6 +20,10 @@ export function solveCurve(
   targetLevel: number,
   targetValue: number
 ): SolveResult {
+  // S-Curve: factor가 아닌 range/rate/midpoint로 구동 → 기존 이분탐색 불가 → unsupported.
+  if (type === "s_curve") {
+    return { solved: false, factor: 0, achievedValue: 0 };
+  }
   // 부정 입력 가드.
   if (base <= 0 || !Number.isFinite(base) || !Number.isFinite(targetValue)) {
     return { solved: false, factor: 0, achievedValue: 0 };

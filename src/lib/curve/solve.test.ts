@@ -51,4 +51,11 @@ describe("solveCurve — no-solution (garbage 금지)", () => {
     const r = solveCurve("linear", 0, 10, 200);
     expect(r.solved).toBe(false);
   });
+
+  it("s_curve → unsupported (factor 구동 아님) → solved:false", () => {
+    const r = solveCurve("s_curve", 100, 11, 200);
+    expect(r.solved).toBe(false);
+    expect(r.factor).toBe(0);
+    expect(r.achievedValue).toBe(0);
+  });
 });

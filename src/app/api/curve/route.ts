@@ -8,8 +8,8 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "fit") {
     const { points, type } = body;
-    if (!["linear", "power", "exponential", "logarithmic", "quadratic"].includes(type)) {
-      return NextResponse.json({ error: "type 은 linear | power | exponential | logarithmic | quadratic 이어야 합니다." }, { status: 400 });
+    if (!["linear", "power", "exponential", "logarithmic", "quadratic", "s_curve"].includes(type)) {
+      return NextResponse.json({ error: "type 은 linear | power | exponential | logarithmic | quadratic | s_curve 이어야 합니다." }, { status: 400 });
     }
     if (!Array.isArray(points)) {
       return NextResponse.json({ error: "points 는 {level,value} 배열이어야 합니다." }, { status: 400 });
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(res, { status: 200 });
   }
 
-  const { table_id, level_column, value_column, type, base, factor, count, replace, round } = body;
+  const { table_id, level_column, value_column, type, base, factor, count, replace, round, range, rate, midpoint } = body;
   if (!table_id || !value_column) return NextResponse.json({ error: "table_id, value_column required" }, { status: 400 });
   const nBase = Number(base), nFactor = Number(factor), nCount = Number(count);
   if (![nBase, nFactor, nCount].every(Number.isFinite) || nCount < 1) {
@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
       count: nCount,
       round,
       replace,
+      ...(range != null && { range: Number(range) }),
+      ...(rate != null && { rate: Number(rate) }),
+      ...(midpoint != null && { midpoint: Number(midpoint) }),
     });
     return NextResponse.json(res, { status: 201 });
   } catch (e) {

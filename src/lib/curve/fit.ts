@@ -6,6 +6,10 @@ export interface FitResult {
   base: number;
   factor: number;
   r2: number; // 회귀가 수행된 공간(변환공간)의 결정계수. 완전적합 → ≈1.
+  // S-Curve 전용 (다른 타입에서는 undefined)
+  range?: number;
+  rate?: number;
+  midpoint?: number;
 }
 
 interface OLS {
@@ -69,6 +73,33 @@ export function fitCurve(points: { level: number; value: number }[], type: Curve
     const ys = points.map((p) => p.value);
     const f = ols(xs, ys);
     return { base: f.intercept, factor: f.slope, r2: f.r2 };
+  }
+
+  if (type === "s_curve") {
+    // 로지스틱 logit 선형화 닫힌형: value = base + range/(1+exp(-rate*(L-midpoint)))
+    //   normalized p = (value-base)/range,  logit(p)=ln(p/(1-p)) = rate*L - rate*midpoint
+    //   → OLS(x=level, y=logit): slope=rate, intercept=-rate*midpoint.
+    // ★base/range를 극단값(min/max)으로 추정 — round-trip엔 정확, freehand 근사케이스는 근사.
+    const base = Math.min(...points.map((p) => p.value));
+    const range = Math.max(...points.map((p) => p.value)) - base;
+    if (range <= 0) return { base, factor: 0, r2: 0, range: 0, rate: 0, midpoint: 0 };
+
+    // 경계점(p<=0 or p>=1)은 logit 불가 → skip (fit.ts 기존 규율).
+    const usable = points.filter((p) => {
+      const norm = (p.value - base) / range;
+      return norm > 0 && norm < 1;
+    });
+    if (usable.length < 2) return { base, factor: 0, r2: 0, range, rate: 0, midpoint: 0 };
+
+    const xs = usable.map((p) => p.level);
+    const ys = usable.map((p) => {
+      const norm = (p.value - base) / range;
+      return Math.log(norm / (1 - norm));
+    });
+    const f = ols(xs, ys);
+    const rate = f.slope;
+    const midpoint = rate !== 0 ? -f.intercept / rate : 0;
+    return { base, factor: 0, r2: f.r2, range, rate, midpoint };
   }
 
   if (type === "power") {

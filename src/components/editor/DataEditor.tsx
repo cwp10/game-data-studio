@@ -60,7 +60,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
-  const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
+  const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true, range: "100", rate: "0.3", midpoint: "15" });
   const [solveTargetLevel, setSolveTargetLevel] = useState("");
   const [solveTargetValue, setSolveTargetValue] = useState("");
   const [solveResult, setSolveResult] = useState<{ ok: boolean; achievedValue?: number } | null>(null);
@@ -454,13 +454,21 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   // 성장 곡선 미리보기 (클라이언트 계산)
   const curvePreview = (() => {
-    const base = Number(curve.base), factor = Number(curve.factor), count = Number(curve.count);
-    if (![base, factor, count].every(Number.isFinite) || count < 1) return [];
+    const base = Number(curve.base), count = Number(curve.count);
+    if (!Number.isFinite(base) || !Number.isFinite(count) || count < 1) return [];
+    if (curve.type === "s_curve") {
+      const range = Number(curve.range), rate = Number(curve.rate), midpoint = Number(curve.midpoint);
+      if (![range, rate, midpoint].every(Number.isFinite)) return [];
+      return computeCurve({ type: "s_curve", base, factor: 0, count: Math.min(count, 200), range, rate, midpoint });
+    }
+    const factor = Number(curve.factor);
+    if (!Number.isFinite(factor)) return [];
     return computeCurve({ type: curve.type, base, factor, count: Math.min(count, 200) });
   })();
 
   // 목표값으로 factor 역산 (클라이언트 순수 함수, type/base 는 모달 현재 값 사용)
   const runSolve = () => {
+    if (curve.type === "s_curve") { setSolveResult({ ok: false }); return; }
     const r = solveCurve(curve.type, Number(curve.base), Number(solveTargetLevel), Number(solveTargetValue));
     if (!r.solved) { setSolveResult({ ok: false }); return; }
     setCurve({ ...curve, factor: String(r.factor) });
@@ -475,18 +483,34 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
       .map((p) => ({ level: Number(p.level), value: Number(p.value) }));
     if (usable.length < 2) { setFitResult({ ok: false }); return; }
     const r = fitCurve(usable, curve.type);
-    setCurve({ ...curve, base: String(r.base), factor: String(r.factor) });
+    if (curve.type === "s_curve") {
+      setCurve({ ...curve, base: String(r.base), range: String(r.range ?? 100), rate: String(r.rate ?? 0.3), midpoint: String(r.midpoint ?? 15) });
+    } else {
+      setCurve({ ...curve, base: String(r.base), factor: String(r.factor) });
+    }
     setFitResult({ ok: true, r2: r.r2 });
   };
 
   const runCurve = async () => {
     if (!selectedId || !curve.value_column.trim()) return;
+    const body: Record<string, unknown> = {
+      table_id: selectedId,
+      value_column: curve.value_column.trim(),
+      level_column: curve.level_column.trim() || "level",
+      type: curve.type,
+      base: Number(curve.base),
+      factor: curve.type === "s_curve" ? 0 : Number(curve.factor),
+      count: Number(curve.count),
+      replace: curve.replace,
+    };
+    if (curve.type === "s_curve") {
+      body.range = Number(curve.range);
+      body.rate = Number(curve.rate);
+      body.midpoint = Number(curve.midpoint);
+    }
     const res = await fetch("/api/curve", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        table_id: selectedId, value_column: curve.value_column.trim(), level_column: curve.level_column.trim() || "level",
-        type: curve.type, base: Number(curve.base), factor: Number(curve.factor), count: Number(curve.count), replace: curve.replace,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? "생성에 실패했습니다."); return; }
     setShowCurve(false);
@@ -959,24 +983,60 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               <option value="exponential">지수 — base × factor^(L-1)</option>
               <option value="logarithmic">로그 — base + factor×ln(L)</option>
               <option value="quadratic">2차 — base + factor×(L-1)²</option>
+              <option value="s_curve">S-Curve — base + range/(1+exp(-rate×(L-mid)))</option>
             </Select>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <div className="text-[11px] text-[#9a9aa3] mb-1">base</div>
-              <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
+          {curve.type === "s_curve" ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">base (하한)</div>
+                  <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
+                </div>
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
+                  <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">range (증가폭)</div>
+                  <Input value={curve.range} onChange={(e) => setCurve({ ...curve, range: e.target.value })} />
+                </div>
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">rate (가파름)</div>
+                  <Input value={curve.rate} onChange={(e) => setCurve({ ...curve, rate: e.target.value })} />
+                </div>
+                <div>
+                  <div className="text-[11px] text-[#9a9aa3] mb-1">midpoint (변곡 레벨)</div>
+                  <Input value={curve.midpoint} onChange={(e) => setCurve({ ...curve, midpoint: e.target.value })} />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <div className="text-[11px] text-[#9a9aa3] mb-1">base</div>
+                <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
+              </div>
+              <div>
+                <div className="text-[11px] text-[#9a9aa3] mb-1">factor</div>
+                <Input value={curve.factor} onChange={(e) => setCurve({ ...curve, factor: e.target.value })} />
+              </div>
+              <div>
+                <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
+                <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
+              </div>
             </div>
-            <div>
-              <div className="text-[11px] text-[#9a9aa3] mb-1">factor</div>
-              <Input value={curve.factor} onChange={(e) => setCurve({ ...curve, factor: e.target.value })} />
-            </div>
-            <div>
-              <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
-              <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
-            </div>
-          </div>
+          )}
 
           {/* 목표값으로 역산 */}
+          {curve.type === "s_curve" ? (
+            <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3">
+              <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">목표값으로 역산</div>
+              <div className="text-[10px] text-[#6b6b77] mt-1">S-Curve는 단일 factor가 없어 역산이 지원되지 않습니다.</div>
+            </div>
+          ) : (
           <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
             <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">목표값으로 역산</div>
             <div className="text-[10px] text-[#6b6b77]">현재 타입·base 기준으로 목표 레벨에서 목표값이 되는 factor 를 계산합니다.</div>
@@ -998,11 +1058,12 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               )}
             </div>
           </div>
+          )}
 
           {/* 점에서 곡선 맞추기 (피팅) */}
           <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
             <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">점에서 곡선 맞추기</div>
-            <div className="text-[10px] text-[#6b6b77]">(레벨, 값) 점들을 입력하면 현재 타입으로 base·factor 를 역산합니다.</div>
+            <div className="text-[10px] text-[#6b6b77]">{curve.type === "s_curve" ? "(레벨, 값) 점들을 입력하면 S-Curve로 base·range·rate·midpoint 를 역산합니다." : "(레벨, 값) 점들을 입력하면 현재 타입으로 base·factor 를 역산합니다."}</div>
             <div className="space-y-1">
               <div className="flex gap-2 text-[10px] text-[#4a4a55] px-0.5">
                 <div className="flex-1">레벨</div>

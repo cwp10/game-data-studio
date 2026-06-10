@@ -32,4 +32,25 @@ describe("computeCurve", () => {
     expect(computeCurve({ type: "logarithmic", base: 100, factor: 10, count: 3 })).toEqual([100, 107, 111]);
     expect(computeCurve({ type: "logarithmic", base: 100, factor: 10, count: 3, round: false })[2]).toBeCloseTo(110.986, 2);
   });
+
+  it("s_curve: level=midpoint → base + range/2 (변곡점 중간값)", () => {
+    // count=100, midpoint=50 → index 49 (level 50) = base + range/2
+    const series = computeCurve({ type: "s_curve", base: 0, factor: 0, count: 100, range: 100, rate: 1, midpoint: 50, round: false });
+    expect(series[49]).toBeCloseTo(50, 2); // base + range/2 = 0 + 100/2
+  });
+
+  it("s_curve: level=1 → 하한 근방 (< 1), level=100 → 상한 근방 (> 99)", () => {
+    const series = computeCurve({ type: "s_curve", base: 0, factor: 0, count: 100, range: 100, rate: 1, midpoint: 50, round: false });
+    expect(series[0]).toBeLessThan(1);    // level=1 ≈ 하한 base
+    expect(series[99]).toBeGreaterThan(99); // level=100 ≈ 상한 base+range
+  });
+
+  it("s_curve: 기본값(range=100, rate=0.5, midpoint=count/2) 동작", () => {
+    // range/rate/midpoint 미지정 → 기본값. count=10 → midpoint=5.
+    const series = computeCurve({ type: "s_curve", base: 0, factor: 0, count: 10, round: false });
+    // level=5 (index 4) = midpoint → base + range/2 = 50
+    expect(series[4]).toBeCloseTo(50, 5);
+    expect(series[9]).toBeGreaterThan(50); // 상한 방향 단조 증가
+    expect(series[0]).toBeLessThan(50);    // 하한 방향
+  });
 });
