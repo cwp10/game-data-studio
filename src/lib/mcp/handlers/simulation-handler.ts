@@ -5,7 +5,18 @@ import { readRows } from "../../db/repo/rows.js";
 import { getTable } from "../../db/repo/tables.js";
 import { listSimulations, saveSimulation } from "../../db/repo/simulations.js";
 import { runMonteCarlo } from "../../simulation/combat.js";
+import { runGachaSimulation } from "../../simulation/gacha.js";
+import { runDpsSimulation } from "../../simulation/dps.js";
 import { ok } from "./respond.js";
+
+const buildSpecSchema = z.object({
+  name: z.string(),
+  atk: z.number(),
+  def: z.number(),
+  critRate: z.number().optional(),
+  critMult: z.number().optional(),
+  attackSpeed: z.number().optional(),
+});
 
 const unitSchema = z.object({
   name: z.string(),
@@ -65,5 +76,31 @@ export function registerSimulationHandlers(server: McpServer) {
     },
     async ({ attacker, defender, iterations, seed }) =>
       ok(runMonteCarlo(attacker, defender, iterations, seed))
+  );
+
+  server.tool(
+    "run_gacha_simulation",
+    "가챠 몬테카를로 시뮬(소프트 천장 반영, avgPulls·maxPulls·pityHitRate·distribution)",
+    {
+      baseRate: z.number(),
+      pityStart: z.number(),
+      pityCap: z.number(),
+      iterations: z.number().default(10000),
+      seed: z.number().default(0),
+    },
+    async ({ baseRate, pityStart, pityCap, iterations, seed }) =>
+      ok(runGachaSimulation(baseRate, pityStart, pityCap, iterations, seed))
+  );
+
+  server.tool(
+    "run_dps_simulation",
+    "빌드별 DPS 몬테카를로 시뮬(per-hit 데미지 samples + mean/min/max로 빌드 비교)",
+    {
+      builds: z.array(buildSpecSchema),
+      iterations: z.number().default(10000),
+      seed: z.number().default(0),
+    },
+    async ({ builds, iterations, seed }) =>
+      ok(runDpsSimulation(builds, iterations, seed))
   );
 }
