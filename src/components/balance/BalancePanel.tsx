@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Bot } from "lucide-react";
 import { Btn, SectionLabel, Tooltip, Input, Select } from "@/components/ui";
 import { LineChart } from "@/components/chart/LineChart";
 import { RadarChart } from "@/components/chart/RadarChart";
 import { pearson, type WinMatrix } from "@/lib/balance/correlate";
+import { buildBalanceReportPrompt } from "@/lib/balance/promptBuilder";
 
 const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
 
@@ -35,6 +36,8 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
   const [results, setResults] = useState<BalanceResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalRows, setTotalRows] = useState(0);
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // 크로스 테이블 비교
   const [crossTableA, setCrossTableA] = useState("");
@@ -147,6 +150,81 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
     setLoading(false);
   };
 
+  // analyze 결과 → 프롬프트 → /api/chat(SSE 스트림) 으로 서술형 밸런싱 리포트 생성.
+  // 주의: POST /api/chat 는 프롬프트/응답을 프로젝트 챗 transcript 에 영속한다(addMessage).
+  const runAiReport = async () => {
+    setAiLoading(true);
+    setAiReport(null);
+    try {
+      // 분석 결과가 비어있으면 먼저 전체 테이블 분석
+      let analysisResults = results;
+      if (analysisResults.length === 0) {
+        const allResults: BalanceResult[] = [];
+        for (const t of tables) {
+          const res = await fetch("/api/balance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: t.id }) });
+          const d = await res.json();
+          allResults.push(...(d.results ?? []));
+        }
+        setResults(allResults);
+        analysisResults = allResults;
+      }
+
+      // 프로젝트 정보 조회 (장르 맥락)
+      const projectRes = await fetch(`/api/projects/${projectId}`);
+      const project = await projectRes.json();
+
+      const prompt = buildBalanceReportPrompt({
+        projectName: project.name ?? projectId,
+        genre: project.genre ?? null,
+        tables: tables.map((t) => ({ name: t.name })),
+        analyzeResults: analysisResults,
+      });
+
+      // /api/chat 는 SSE 스트림 → assistant text 블록을 누적 (ChatPanel 패턴 미러)
+      const chatRes = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, message: prompt }),
+      });
+      if (!chatRes.body) throw new Error("스트림을 받을 수 없습니다.");
+
+      const reader = chatRes.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const lines = part.split("\n");
+          const evLine = lines.find((l) => l.startsWith("event:"));
+          const dataLine = lines.find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          if (evLine?.includes("stderr")) continue;
+          if (evLine?.includes("error")) { setAiReport((prev) => (prev ?? "") + "\n[실행 중 오류가 발생했습니다]"); continue; }
+          const data = dataLine.slice(5).trim();
+          if (data === "[DONE]") continue;
+          let o: { type?: string; message?: { content?: { type: string; text?: string }[] } };
+          try { o = JSON.parse(data); } catch { continue; }
+          if (o.type === "assistant") {
+            for (const b of o.message?.content ?? []) {
+              if (b.type === "text" && b.text?.trim()) { acc += (acc ? "\n\n" : "") + b.text; setAiReport(acc); }
+            }
+          }
+        }
+      }
+      if (!acc) setAiReport("리포트 응답이 비어 있습니다.");
+    } catch (e) {
+      console.error("AI 리포트 생성 실패:", e);
+      setAiReport("리포트 생성 실패: " + String(e));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const dangers = results.flatMap((r) => r.anomalies.filter((a) => a.severity === "danger").map((a) => ({ ...a, column: r.column, mean: r.mean })));
   const warns = results.flatMap((r) => r.anomalies.filter((a) => a.severity === "warn").map((a) => ({ ...a, column: r.column, mean: r.mean })));
   const anomalyCount = results.reduce((a, r) => a + r.anomalies.length, 0);
@@ -171,9 +249,14 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
 
       <div className="flex items-center justify-between mb-2">
         <SectionLabel className="mb-0 mt-0">이상값 목록</SectionLabel>
-        <Tooltip label={loading ? "분석 중..." : "AI 밸런스 분석"}>
-          <Btn variant="primary" onClick={runAll} disabled={loading}><Sparkles size={11} /></Btn>
-        </Tooltip>
+        <div className="flex items-center gap-1.5">
+          <Tooltip label={loading ? "분석 중..." : "AI 밸런스 분석"}>
+            <Btn variant="primary" onClick={runAll} disabled={loading}><Sparkles size={11} /></Btn>
+          </Tooltip>
+          <Btn variant="primary" onClick={runAiReport} disabled={aiLoading}>
+            <Bot size={11} />{aiLoading ? "생성 중..." : "AI 리포트"}
+          </Btn>
+        </div>
       </div>
       <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl overflow-hidden mb-6">
         <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between">
@@ -197,6 +280,21 @@ export function BalancePanel({ projectId, onNavigate }: { projectId: string; onN
           <div className="px-4 py-6 text-[11px] text-[#3a3a42] text-center">이상값이 없습니다 — AI 분석을 실행하세요.</div>
         )}
       </div>
+
+      {aiReport && (
+        <>
+          <SectionLabel>AI 밸런싱 리포트</SectionLabel>
+          <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[11px] text-[#6b6b77]">Claude AI 분석{aiLoading ? " · 생성 중..." : ""}</span>
+              <Btn className="text-[10px] py-0.5 px-2" onClick={() => setAiReport(null)}>닫기</Btn>
+            </div>
+            <pre className="text-[12px] text-[#c4b5fd] whitespace-pre-wrap leading-relaxed font-sans">
+              {aiReport}
+            </pre>
+          </div>
+        </>
+      )}
 
       {results.length > 0 && (
         <>
