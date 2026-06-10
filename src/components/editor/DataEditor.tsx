@@ -6,6 +6,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
 import { solveCurve } from "@/lib/curve/solve";
+import { fitCurve } from "@/lib/curve/fit";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
@@ -52,6 +53,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [solveTargetLevel, setSolveTargetLevel] = useState("");
   const [solveTargetValue, setSolveTargetValue] = useState("");
   const [solveResult, setSolveResult] = useState<{ ok: boolean; achievedValue?: number } | null>(null);
+  // 곡선 피팅: (level, value) 점 입력 → fitCurve(클라이언트 순수) → base/factor 자동 채움 + R².
+  const [fitPoints, setFitPoints] = useState<{ level: string; value: string }[]>([{ level: "1", value: "" }, { level: "2", value: "" }]);
+  const [fitResult, setFitResult] = useState<{ ok: boolean; r2?: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickedRowRef = useRef<string | null>(null);
@@ -427,6 +431,18 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     if (!r.solved) { setSolveResult({ ok: false }); return; }
     setCurve({ ...curve, factor: String(r.factor) });
     setSolveResult({ ok: true, achievedValue: r.achievedValue });
+  };
+
+  // 점에서 곡선 맞추기 (클라이언트 순수 fitCurve, 현재 type 기준)
+  // 빈/NaN 행은 제외. 유효점 2개 미만이면 안내만 하고 base/factor 를 건드리지 않는다(0 덮어쓰기 방지).
+  const runFit = () => {
+    const usable = fitPoints
+      .filter((p) => p.level.trim() !== "" && p.value.trim() !== "" && Number.isFinite(Number(p.level)) && Number.isFinite(Number(p.value)))
+      .map((p) => ({ level: Number(p.level), value: Number(p.value) }));
+    if (usable.length < 2) { setFitResult({ ok: false }); return; }
+    const r = fitCurve(usable, curve.type);
+    setCurve({ ...curve, base: String(r.base), factor: String(r.factor) });
+    setFitResult({ ok: true, r2: r.r2 });
   };
 
   const runCurve = async () => {
@@ -863,9 +879,11 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           <div>
             <div className="text-[11px] text-[#9a9aa3] mb-1">곡선 타입</div>
             <Select value={curve.type} onChange={(e) => setCurve({ ...curve, type: e.target.value as CurveType })}>
-              <option value="linear">linear — base + factor×(L-1)</option>
-              <option value="power">power — base × L^factor</option>
-              <option value="exponential">exponential — base × factor^(L-1)</option>
+              <option value="linear">선형 — base + factor×(L-1)</option>
+              <option value="power">거듭제곱 — base × L^factor</option>
+              <option value="exponential">지수 — base × factor^(L-1)</option>
+              <option value="logarithmic">로그 — base + factor×ln(L)</option>
+              <option value="quadratic">2차 — base + factor×(L-1)²</option>
             </Select>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -902,6 +920,46 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
               {solveResult && (solveResult.ok
                 ? <div className="text-[10px] text-[#4ade80]">factor 적용됨 · 도달값 {solveResult.achievedValue?.toLocaleString()}</div>
                 : <div className="text-[10px] text-[#f87171]">해 없음 (목표 도달 불가 / 레벨 1)</div>
+              )}
+            </div>
+          </div>
+
+          {/* 점에서 곡선 맞추기 (피팅) */}
+          <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
+            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">점에서 곡선 맞추기</div>
+            <div className="text-[10px] text-[#6b6b77]">(레벨, 값) 점들을 입력하면 현재 타입으로 base·factor 를 역산합니다.</div>
+            <div className="space-y-1">
+              <div className="flex gap-2 text-[10px] text-[#4a4a55] px-0.5">
+                <div className="flex-1">레벨</div>
+                <div className="flex-1">값</div>
+                <div className="w-6" />
+              </div>
+              {fitPoints.map((p, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <Input placeholder="예: 1" value={p.level} onChange={(e) => { setFitPoints((prev) => prev.map((q, j) => j === i ? { ...q, level: e.target.value } : q)); setFitResult(null); }} />
+                  </div>
+                  <div className="flex-1">
+                    <Input placeholder="예: 100" value={p.value} onChange={(e) => { setFitPoints((prev) => prev.map((q, j) => j === i ? { ...q, value: e.target.value } : q)); setFitResult(null); }} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setFitPoints((prev) => prev.length > 1 ? prev.filter((_, j) => j !== i) : prev); setFitResult(null); }}
+                    disabled={fitPoints.length <= 1}
+                    className="w-6 h-6 flex items-center justify-center rounded text-[#6b6b77] hover:text-[#f87171] hover:bg-[#2a2a2f] disabled:opacity-30 disabled:hover:text-[#6b6b77] disabled:hover:bg-transparent"
+                    title="점 삭제"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <Btn onClick={() => { setFitPoints((prev) => [...prev, { level: "", value: "" }]); setFitResult(null); }}><Plus size={11} />점 추가</Btn>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <Btn onClick={runFit}><Sparkles size={11} />맞추기</Btn>
+              {fitResult && (fitResult.ok
+                ? <div className="text-[10px] text-[#4ade80]">파라미터 적용됨 · 적합도 R²={fitResult.r2?.toFixed(2)}</div>
+                : <div className="text-[10px] text-[#f87171]">점 2개 이상을 입력하세요</div>
               )}
             </div>
           </div>

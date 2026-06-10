@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateCurveIntoTable } from "@/lib/curve/apply";
 import { solveCurve } from "@/lib/curve/solve";
+import { fitCurve } from "@/lib/curve/fit";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+
+  if (body.action === "fit") {
+    const { points, type } = body;
+    if (!["linear", "power", "exponential", "logarithmic", "quadratic"].includes(type)) {
+      return NextResponse.json({ error: "type 은 linear | power | exponential | logarithmic | quadratic 이어야 합니다." }, { status: 400 });
+    }
+    if (!Array.isArray(points)) {
+      return NextResponse.json({ error: "points 는 {level,value} 배열이어야 합니다." }, { status: 400 });
+    }
+    const pts = points.map((p: { level: unknown; value: unknown }) => ({ level: Number(p.level), value: Number(p.value) }));
+    const res = fitCurve(pts, type);
+    return NextResponse.json(res, { status: 200 });
+  }
 
   if (body.action === "solve") {
     const { type, base, targetLevel, targetValue } = body;
