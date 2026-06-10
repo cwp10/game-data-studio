@@ -1,17 +1,17 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save } from "lucide-react";
+import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2 } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
+import { useGridState, type Row } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
 const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
 
 interface Table { id: string; name: string; }
 interface Column { id: string; table_id?: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
-interface Row { id: string; data: Record<string, unknown>; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
 interface EnumType { id: string; name: string; values: string[]; }
@@ -20,7 +20,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>([]);
-  const [rows, setRows] = useState<Row[]>([]);
+  const grid = useGridState();
+  const { rows } = grid;
   const [balance, setBalance] = useState<BalanceResult[]>([]);
   const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
@@ -42,11 +43,15 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const fileRef = useRef<HTMLInputElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickedRowRef = useRef<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadData = (tid: string) => Promise.all([
     fetch(`/api/tables/${tid}`).then((r) => r.json()).then((d: { columns: Column[] }) => setColumns(d.columns)),
-    fetch(`/api/rows?table_id=${tid}`).then((r) => r.json()).then(setRows),
+    fetch(`/api/rows?table_id=${tid}`).then((r) => r.json()).then((rows: Row[]) => grid.load(rows)),
   ]);
   const enumValuesFor = (col: Column): string[] => enumTypes.find((e) => e.id === col.enum_type_id)?.values ?? [];
 
@@ -88,7 +93,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     columns.forEach((c) => { data[c.name] = c.type === "number" ? 0 : ""; });
     const r = await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, data }) });
     const row = await r.json();
-    setRows((prev) => [...prev, row]);
+    grid.append(row);
   };
 
   const handleRowClick = (rowId: string, e: React.MouseEvent) => {
@@ -121,20 +126,81 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ row_ids: ids }),
     });
-    setRows((prev) => prev.filter((r) => !selectedRowIds.has(r.id)));
+    grid.deleteByIds(ids);
     setSelectedRowIds(new Set());
     scheduleBalance();
   };
 
+  // 저장 표시기: saving → POST → saved(2초) → idle. 실패 시 idle 복귀(멈춤 방지).
+  const postRow = async (id: string, data: Record<string, unknown>) => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    setSaveState("saving");
+    try {
+      await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, id, data }) });
+      setSaveState("saved");
+      saveTimer.current = setTimeout(() => { saveTimer.current = null; setSaveState("idle"); }, 2000);
+      return true;
+    } catch (e) {
+      console.error(e);
+      setSaveState("idle");
+      return false;
+    }
+  };
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
   const saveCell = async (row: Row, col: string, val: string) => {
     const col_ = columns.find((c) => c.name === col);
     const parsed = col_?.type === "number" ? (isNaN(Number(val)) ? val : Number(val)) : val;
+    const before = row.data[col];
     const newData = { ...row.data, [col]: parsed };
-    await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, id: row.id, data: newData }) });
-    setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, data: newData } : r));
+    const ok = await postRow(row.id, newData);
     setEditing(null);
+    if (!ok) return;
+    grid.updateCell(row.id, col, before, parsed);
     scheduleBalance();
   };
+
+  // Undo/Redo: reducer는 순수하므로 DB 라운드트립(POST)을 컴포넌트에서 처리. 성공 시에만 dispatch.
+  const handleUndo = async () => {
+    const cmd = grid.undoTop;
+    if (!cmd) return;
+    const row = grid.rows.find((r) => r.id === cmd.rowId);
+    if (!row) return;
+    const newData = { ...row.data, [cmd.col]: cmd.before };
+    const ok = await postRow(cmd.rowId, newData);
+    if (!ok) return;
+    grid.undo();
+    scheduleBalance();
+  };
+  const handleRedo = async () => {
+    const cmd = grid.redoTop;
+    if (!cmd) return;
+    const row = grid.rows.find((r) => r.id === cmd.rowId);
+    if (!row) return;
+    const newData = { ...row.data, [cmd.col]: cmd.after };
+    const ok = await postRow(cmd.rowId, newData);
+    if (!ok) return;
+    grid.redo();
+    scheduleBalance();
+  };
+
+  // 단축키 핸들러를 ref에 보관(매 렌더 갱신)해 stale closure 없이 [] deps 리스너에서 최신 값 호출.
+  const shortcutRef = useRef({ handleUndo, handleRedo, editing });
+  shortcutRef.current = { handleUndo, handleRedo, editing };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z" && e.key.toLowerCase() !== "y") return;
+      // 가드: 셀 편집 중이거나 입력 요소에 포커스가 있으면(채팅·검색) 브라우저 기본 동작 우선.
+      const el = document.activeElement;
+      const tag = el?.tagName.toLowerCase();
+      if (shortcutRef.current.editing !== null || tag === "input" || tag === "textarea" || tag === "select") return;
+      const isRedo = e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey);
+      e.preventDefault();
+      if (isRedo) shortcutRef.current.handleRedo(); else shortcutRef.current.handleUndo();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const runBalance = async () => {
     if (!selectedId) return;
@@ -288,8 +354,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     }
     for (const [id, data] of patches) {
       await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, id, data }) });
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, data } : r)));
     }
+    grid.setRows(rows.map((r) => { const data = patches.get(r.id); return data ? { ...r, data } : r; }));
     runBalance();
   };
 
@@ -323,6 +389,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1 flex-shrink-0">
             <Tooltip label="선택 삭제"><Btn disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn></Tooltip>
             {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6] px-1">{selectedRowIds.size}행</span>}
+            <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
+            <Tooltip label="실행 취소 (Cmd/Ctrl+Z)"><Btn disabled={!grid.canUndo} onClick={handleUndo}><Undo2 size={11} /></Btn></Tooltip>
+            <Tooltip label="다시 실행 (Cmd/Ctrl+Shift+Z)"><Btn disabled={!grid.canRedo} onClick={handleRedo}><Redo2 size={11} /></Btn></Tooltip>
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
             <Tooltip label="CSV 임포트"><Btn onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn></Tooltip>
             <div className="relative">
@@ -442,13 +511,19 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                               {enumValuesFor(c).map((v) => <option key={v} value={v}>{v}</option>)}
                             </select>
                           ) : isEditing ? (
+                            // IME 견고화: uncontrolled(defaultValue+ref). 조합 중 Enter는 확정으로만 처리, 저장 안 함.
                             <input
                               autoFocus
+                              ref={editInputRef}
                               className="w-full px-1 py-0.5 border border-[#7c3aed] rounded text-xs outline-none bg-[#1e1b4b] text-[#ededed]"
-                              value={editVal}
-                              onChange={(e) => setEditVal(e.target.value)}
-                              onBlur={() => saveCell(row, c.name, editVal)}
-                              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveCell(row, c.name, editVal); if (e.key === "Escape") setEditing(null); }}
+                              defaultValue={String(row.data[c.name] ?? "")}
+                              onCompositionStart={() => { isComposingRef.current = true; }}
+                              onCompositionEnd={() => { isComposingRef.current = false; }}
+                              onBlur={(e) => saveCell(row, c.name, e.currentTarget.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !isComposingRef.current && !e.nativeEvent.isComposing) saveCell(row, c.name, e.currentTarget.value);
+                                if (e.key === "Escape") setEditing(null);
+                              }}
                             />
                           ) : (
                             <span className={anomaly ? (anomaly.severity === "danger" ? "text-[#f87171] font-medium" : "text-[#f59e0b] font-medium") : "text-[#ededed]"}>
@@ -587,6 +662,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <span>game-data-studio.db</span>
         <span className="text-[#2a2a2f]">·</span>
         <span>{rows.length}행 {columns.length}컬럼{searchQuery.trim() && ` (${filteredRows.length}건 표시)`}</span>
+        {saveState === "saving" && <span className="text-[#9a9aa3]">저장 중…</span>}
+        {saveState === "saved" && <span className="text-[#4ade80]">저장됨 ✓</span>}
         <div className="ml-auto flex gap-3">
           {totalAnomalies > 0 && <span className="text-[#f87171]">이상값 {totalAnomalies}건</span>}
           {totalWarns > 0 && <span className="text-[#f59e0b]">경고 {totalWarns}건</span>}

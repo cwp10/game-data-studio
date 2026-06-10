@@ -1,5 +1,6 @@
 "use client";
 import { ButtonHTMLAttributes, HTMLAttributes, ReactNode, useRef, useState } from "react";
+import { useEscapeKey } from "@/components/useEscapeKey";
 
 export function Btn({
   variant = "default",
@@ -106,6 +107,7 @@ export function SectionLabel({ children, className = "" }: { children: ReactNode
 }
 
 export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  useEscapeKey(open, onClose);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
