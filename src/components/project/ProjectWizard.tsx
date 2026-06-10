@@ -9,39 +9,49 @@ interface PlanColumn { name: string; type: string; description?: string }
 interface PlanTable { name: string; description?: string; columns?: PlanColumn[] }
 interface Plan { name: string; genre: string; description: string; tables: PlanTable[] }
 
-const L1: Step = {
-  question: "어떤 장르의 게임인가요?",
-  options: [
-    { label: "RPG", hint: "역할수행·성장·전투" },
-    { label: "시뮬레이션", hint: "경영·육성·운영" },
-    { label: "퍼즐", hint: "논리·매칭·두뇌" },
-    { label: "액션", hint: "반응·전투·횡스크롤" },
-    { label: "전략", hint: "자원·배치·전술" },
-    { label: "방치형/캐주얼", hint: "자동·가벼운 플레이" },
-    { label: "교육", hint: "학습·문제·퀴즈" },
-    { label: "스포츠", hint: "경기·시즌·선수" },
-  ],
-  canFinish: false,
+// 계약 §1: RPG 6종 (코드·라벨·힌트). L1 카드는 이 6개 그대로, 순서 유지, 2열 그리드.
+const GENRES: { code: string; label: string; hint: string }[] = [
+  { code: "collection_rpg", label: "수집형 RPG", hint: "캐릭터 수집·가챠·성장" },
+  { code: "idle_rpg", label: "방치형 RPG", hint: "자동 전투·방치 보상·경제" },
+  { code: "mmorpg", label: "MMORPG", hint: "직업·장비 강화·던전·거래소" },
+  { code: "battle_rpg", label: "턴제/액션 RPG", hint: "속성 상성·스킬·챕터" },
+  { code: "roguelike_rpg", label: "로그라이크 RPG", hint: "런/층 스케일링·아이템 시너지" },
+  { code: "srpg", label: "SRPG (전략)", hint: "유닛 성장률·무기 상성·그리드" },
+];
+
+// 계약 §4: 장르별 ★ 주력 시뮬 요약 (plan 미리보기 안내용)
+const SIM_SUMMARY: Record<string, string[]> = {
+  collection_rpg: ["가챠", "전투", "스탯 계산기"],
+  idle_rpg: ["경제+인플레이션", "난이도/플레이타임"],
+  mmorpg: ["경제+인플레이션", "DPS 분산(레이드)", "PvP 승률 매트릭스"],
+  battle_rpg: ["전투", "스탯 계산기", "DPS 분산", "난이도/플레이타임"],
+  roguelike_rpg: ["전투(런)", "DPS 분산(빌드)", "난이도(층)"],
+  srpg: ["전투", "스탯 계산기", "난이도/플레이타임"],
 };
 
+const L1_QUESTION = "어떤 장르의 게임인가요?";
+
 export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string, name: string) => void }) {
-  const [step, setStep] = useState<Step>(L1);
+  const [step, setStep] = useState<Step | null>(null);
+  const [genre, setGenre] = useState("");
   const [path, setPath] = useState<string[]>([]);
   const [stack, setStack] = useState<Step[]>([]);
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [name, setName] = useState("");
-  const [custom, setCustom] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pick = async (label: string) => {
+  // genreCode: L1 카드 클릭 시 명시 전달(같은 핸들러에서 state는 아직 반영 전이므로).
+  const pick = async (label: string, genreCode?: string) => {
+    const g = genreCode ?? genre;
     const newPath = [...path, label];
-    setLoading(true); setError(null); setCustom("");
+    setLoading(true); setError(null);
     try {
-      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: newPath }) }).then((r) => r.json());
+      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: newPath, genre: g }) }).then((r) => r.json());
       if (d.error || d.type !== "choices") throw new Error(d.error ?? "");
-      setStack((s) => [...s, step]);
+      if (genreCode) setGenre(genreCode);
+      if (step) setStack((s) => [...s, step]);
       setPath(newPath);
       setStep({ question: d.question, options: d.options ?? [], canFinish: !!d.canFinish });
     } catch { setError("선택지를 불러오지 못했습니다. 다시 시도해주세요."); }
@@ -50,7 +60,10 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
 
   const back = () => {
     if (plan) { setPlan(null); return; }
-    if (stack.length === 0) return;
+    if (stack.length === 0) {
+      // L1(장르 선택)으로 복귀
+      setPath([]); setGenre(""); setStep(null); return;
+    }
     setPath((p) => p.slice(0, -1));
     setStep(stack[stack.length - 1]);
     setStack((s) => s.slice(0, -1));
@@ -59,7 +72,7 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
   const finish = async () => {
     setLoading(true); setError(null);
     try {
-      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: path, finish: true }) }).then((r) => r.json());
+      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: path, finish: true, genre }) }).then((r) => r.json());
       if (d.error || d.type !== "plan") throw new Error(d.error ?? "");
       setPlan(d); setName(d.name ?? "");
     } catch { setError("컨셉 생성에 실패했습니다. 다시 시도해주세요."); }
@@ -69,11 +82,14 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
   const create = async () => {
     if (!name.trim() || !plan) return;
     setCreating(true);
-    const p = await fetch("/api/projects/scaffold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...plan, name: name.trim() }) }).then((r) => r.json());
+    const p = await fetch("/api/projects/scaffold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...plan, name: name.trim(), genre }) }).then((r) => r.json());
     setCreating(false);
     if (p?.id) onCreated(p.id, p.name);
     else setError("생성에 실패했습니다.");
   };
+
+  // plan.genre 는 backend가 코드로 덮어쓰므로(라인 343-344) 라벨 표시는 GENRES 조회로.
+  const genreLabel = GENRES.find((g) => g.code === genre)?.label ?? plan?.genre ?? "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6" onClick={onClose}>
@@ -104,7 +120,7 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
                 <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">제안된 컨셉</div>
                 <div className="text-[11px] text-[#6b6b77] mb-1">프로젝트명</div>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
-                <div className="text-[10px] text-[#c4b5fd] mt-2">{plan.genre}</div>
+                <div className="text-[10px] text-[#c4b5fd] mt-2">{genreLabel}</div>
                 <div className="text-[12px] text-[#9a9aa3] leading-relaxed mt-1.5">{plan.description}</div>
               </div>
               <div>
@@ -124,6 +140,18 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
                   ))}
                 </div>
               </div>
+              {SIM_SUMMARY[genre] && (
+                <div>
+                  <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">주력 시뮬레이션</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SIM_SUMMARY[genre].map((s, i) => (
+                      <span key={s} className={`text-[10px] px-2 py-0.5 rounded-md border ${i === 0 ? "bg-[#15101f] border-[#2d1b4d] text-[#c4b5fd]" : "bg-[#0f0f10] border-[#2a2a2f] text-[#6b6b77]"}`}>
+                        {s}{i === 0 ? " ★" : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {error && <div className="text-[11px] text-[#f87171]">{error}</div>}
               <div className="flex justify-between pt-1">
                 <Btn onClick={back}><ChevronLeft size={11} />뒤로</Btn>
@@ -135,33 +163,41 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
           ) : (
             /* 선택 단계 */
             <div>
-              <div className="text-[13px] font-medium text-[#ededed] mb-3">{step.question}</div>
+              <div className="text-[13px] font-medium text-[#ededed] mb-3">{step ? step.question : L1_QUESTION}</div>
               <div className="grid grid-cols-2 gap-2">
-                {step.options.map((o) => (
-                  <button
-                    key={o.label}
-                    onClick={() => pick(o.label)}
-                    className="text-left bg-[#0f0f10] border border-[#2a2a2f] rounded-xl px-3.5 py-3 hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c] transition-colors group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-medium text-[#ededed]">{o.label}</span>
-                      <ArrowRight size={12} className="text-[#3a3a42] group-hover:text-[#8b5cf6] transition-colors" />
-                    </div>
-                    {o.hint && <div className="text-[10px] text-[#6b6b77] mt-0.5 leading-relaxed">{o.hint}</div>}
-                  </button>
-                ))}
-              </div>
-
-              {/* 직접 입력 */}
-              <div className="flex gap-2 mt-3">
-                <Input placeholder="직접 입력 (예: 디펜스, 리듬…)" value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && custom.trim()) pick(custom.trim()); }} />
-                <Btn disabled={!custom.trim()} onClick={() => pick(custom.trim())}>추가</Btn>
+                {step
+                  ? step.options.map((o) => (
+                      <button
+                        key={o.label}
+                        onClick={() => pick(o.label)}
+                        className="text-left bg-[#0f0f10] border border-[#2a2a2f] rounded-xl px-3.5 py-3 hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c] transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[12px] font-medium text-[#ededed]">{o.label}</span>
+                          <ArrowRight size={12} className="text-[#3a3a42] group-hover:text-[#8b5cf6] transition-colors" />
+                        </div>
+                        {o.hint && <div className="text-[10px] text-[#6b6b77] mt-0.5 leading-relaxed">{o.hint}</div>}
+                      </button>
+                    ))
+                  : GENRES.map((g) => (
+                      <button
+                        key={g.code}
+                        onClick={() => pick(g.label, g.code)}
+                        className="text-left bg-[#0f0f10] border border-[#2a2a2f] rounded-xl px-3.5 py-3 hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c] transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[12px] font-medium text-[#ededed]">{g.label}</span>
+                          <ArrowRight size={12} className="text-[#3a3a42] group-hover:text-[#8b5cf6] transition-colors" />
+                        </div>
+                        <div className="text-[10px] text-[#6b6b77] mt-0.5 leading-relaxed">{g.hint}</div>
+                      </button>
+                    ))}
               </div>
 
               {error && <div className="text-[11px] text-[#f87171] mt-3">{error}</div>}
 
               <div className="flex justify-between pt-4">
-                <Btn disabled={stack.length === 0} onClick={back}><ChevronLeft size={11} />뒤로</Btn>
+                <Btn disabled={path.length === 0} onClick={back}><ChevronLeft size={11} />뒤로</Btn>
                 {path.length > 0 && (
                   <Btn variant="primary" onClick={finish}><Sparkles size={11} />이 컨셉으로 만들기</Btn>
                 )}

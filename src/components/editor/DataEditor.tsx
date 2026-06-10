@@ -448,7 +448,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                               value={editVal}
                               onChange={(e) => setEditVal(e.target.value)}
                               onBlur={() => saveCell(row, c.name, editVal)}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveCell(row, c.name, editVal); if (e.key === "Escape") setEditing(null); }}
+                              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveCell(row, c.name, editVal); if (e.key === "Escape") setEditing(null); }}
                             />
                           ) : (
                             <span className={anomaly ? (anomaly.severity === "danger" ? "text-[#f87171] font-medium" : "text-[#f59e0b] font-medium") : "text-[#ededed]"}>
