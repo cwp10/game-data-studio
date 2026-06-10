@@ -17,6 +17,8 @@ interface Anomaly { row_id: string; label: string; value: number; z_score: numbe
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
 interface Violation { row_id: string; column: string; rule: "min" | "max" | "required" | "unique"; value: unknown; message: string; }
 interface EnumType { id: string; name: string; values: string[]; }
+interface BrokenRef { from_table_id: string; from_row_id: string; from_column: string; value: unknown; to_table_id: string; to_column: string; }
+interface ReferencingRow { table_id: string; row_id: string; column: string; }
 
 export function DataEditor({ projectId, onNavigate }: { projectId: string; onNavigate?: (screen: Screen) => void }) {
   const [tables, setTables] = useState<Table[]>([]);
@@ -26,6 +28,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const { rows } = grid;
   const [balance, setBalance] = useState<BalanceResult[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [brokenRefs, setBrokenRefs] = useState<BrokenRef[]>([]);
   const [enumTypes, setEnumTypes] = useState<EnumType[]>([]);
   const [editing, setEditing] = useState<{ rowId: string; col: string } | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -66,7 +69,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   useEffect(() => { fetch(`/api/enum-types?project_id=${projectId}`).then((r) => r.json()).then(setEnumTypes).catch(() => {}); }, [projectId]);
   useEffect(() => { loadTables(); }, [projectId]);
-  useEffect(() => { if (selectedId) { loadData(selectedId); runValidate(selectedId); } }, [selectedId]);
+  useEffect(() => { if (selectedId) { loadData(selectedId); runValidate(selectedId); runFkCheck(); } }, [selectedId]);
 
   // 테이블 전환 시 숨김 컬럼 초기화
   useEffect(() => setHiddenCols(new Set()), [selectedId]);
@@ -128,8 +131,23 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   const deleteSelected = async () => {
     if (!selectedRowIds.size) return;
-    if (!confirm(`${selectedRowIds.size}행을 삭제합니다.`)) return;
     const ids = Array.from(selectedRowIds);
+    // 삭제 전 참조 경고(★ surface-not-block): 참조하는 행이 있으면 confirm에 경고만 추가, 차단하지 않음.
+    // 조회 실패 시에도 삭제를 막지 않고 기본 confirm으로 폴백한다.
+    let refWarning = "";
+    if (selectedId) {
+      try {
+        const res = await fetch("/api/fk/refs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: projectId, table_id: selectedId, row_ids: ids }) });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const referencing: { row_id: string; refs: ReferencingRow[] }[] = d.referencing ?? [];
+        // 참조하는 행을 table_id:row_id로 중복 제거(같은 행이 여러 컬럼으로 참조해도 1행).
+        const refSet = new Set<string>();
+        for (const r of referencing) for (const ref of r.refs) refSet.add(`${ref.table_id}:${ref.row_id}`);
+        if (refSet.size > 0) refWarning = `\n\n⚠️ 선택한 행을 ${refSet.size}개 행이 참조합니다. 삭제 시 참조가 깨집니다.`;
+      } catch (e) { console.error(e); }
+    }
+    if (!confirm(`${selectedRowIds.size}행을 삭제합니다.${refWarning}`)) return;
     await fetch("/api/rows", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -138,6 +156,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     grid.deleteByIds(ids);
     setSelectedRowIds(new Set());
     scheduleBalance();
+    runFkCheck();
   };
 
   // 저장 표시기: saving → POST → saved(2초) → idle. 실패 시 idle 복귀(멈춤 방지).
@@ -307,6 +326,16 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     } catch (e) { console.error(e); }
   };
 
+  // FK 무결성 검증(읽기 전용). 프로젝트 전체 깨진 참조를 조회 → 셀 하이라이트용 surface.
+  const runFkCheck = async () => {
+    try {
+      const res = await fetch("/api/fk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: projectId }) });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setBrokenRefs(d.broken ?? []);
+    } catch (e) { console.error(e); }
+  };
+
   // 셀 편집마다 즉시 재분석하지 않고 연속 편집을 모아 한 번만 재계산한다(API 호출 폭주 방지).
   const scheduleBalance = () => {
     if (balanceTimer.current) clearTimeout(balanceTimer.current);
@@ -333,6 +362,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     return m;
   }, [violations]);
   const getViolations = (rowId: string, col: string) => violationMap.get(`${rowId}:${col}`) ?? null;
+
+  // 깨진 FK를 (rowId:col) 키로 묶어 셀 렌더 시 O(1) 조회. 현재 테이블이 from_table_id인 broken만.
+  const brokenFkMap = useMemo(() => {
+    const m = new Map<string, BrokenRef>();
+    for (const b of brokenRefs) {
+      if (b.from_table_id !== selectedId) continue;
+      m.set(`${b.from_row_id}:${b.from_column}`, b);
+    }
+    return m;
+  }, [brokenRefs, selectedId]);
+  const getBrokenFk = (rowId: string, col: string) => brokenFkMap.get(`${rowId}:${col}`) ?? null;
 
   const GRADE_VALUES = new Set(["SSR", "SR", "R", "N"]);
   const renderCell = (col: Column, val: unknown) => {
@@ -619,13 +659,19 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                     {visibleColumns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
                       const cellViolations = getViolations(row.id, c.name);
+                      const brokenFk = getBrokenFk(row.id, c.name);
                       const isEditing = editing?.rowId === row.id && editing?.col === c.name;
                       const cellSelected = isCellSelected(row.id, c.name);
+                      // 위반·깨진FK 메시지를 합쳐 한 쪽이 다른 쪽 tooltip을 가리지 않게.
+                      const cellTitle = [
+                        ...(cellViolations ? cellViolations.map((v) => v.message) : []),
+                        ...(brokenFk ? [`참조 대상 없음: ${String(brokenFk.value ?? "")}`] : []),
+                      ].join("\n") || undefined;
                       return (
                         <td
                           key={c.id}
-                          title={cellViolations ? cellViolations.map((v) => v.message).join("\n") : undefined}
-                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : cellViolations ? "outline outline-1 -outline-offset-1 outline-[#ef4444] bg-[#ef4444]/10" : ""}`}
+                          title={cellTitle}
+                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : cellViolations ? "outline outline-1 -outline-offset-1 outline-[#ef4444] bg-[#ef4444]/10" : brokenFk ? "outline outline-1 -outline-offset-1 outline-[#f59e0b] bg-[#f59e0b]/10" : ""}`}
                           onClick={(e) => handleCellClick(row.id, c.name, e)}
                           onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}
                         >
