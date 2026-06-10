@@ -6,6 +6,7 @@ import { getTable } from "@/lib/db/repo/tables";
 import { runMonteCarlo } from "@/lib/simulation/combat";
 import { runGachaSimulation } from "@/lib/simulation/gacha";
 import { runDpsSimulation, type BuildSpec } from "@/lib/simulation/dps";
+import { difficultyCurve, type StageInput } from "@/lib/simulation/difficulty";
 
 export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("project_id");
@@ -67,6 +68,20 @@ export async function POST(req: NextRequest) {
     const iterations = Math.min(20000, Math.max(1, Math.floor(rawIterations)));
     const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
     return NextResponse.json(runDpsSimulation(builds, iterations, seed));
+  }
+  if (body.action === "difficulty") {
+    const stages = body.stages as StageInput[];
+    if (!Array.isArray(stages) || stages.length === 0) {
+      return NextResponse.json({ error: "stages must be a non-empty array" }, { status: 400 });
+    }
+    const rawIterations = Number(body.iterations);
+    if (!Number.isFinite(rawIterations) || rawIterations < 1) {
+      return NextResponse.json({ error: "iterations must be a positive number" }, { status: 400 });
+    }
+    const iterations = Math.min(20000, Math.max(1, Math.floor(rawIterations)));
+    const secondsPerTurn = Number.isFinite(Number(body.secondsPerTurn)) ? Number(body.secondsPerTurn) : 1;
+    const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
+    return NextResponse.json(difficultyCurve(body.player, stages, secondsPerTurn, iterations, seed));
   }
   return NextResponse.json(saveSimulation(body), { status: 201 });
 }

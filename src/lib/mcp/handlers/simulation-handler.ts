@@ -7,6 +7,7 @@ import { listSimulations, saveSimulation } from "../../db/repo/simulations.js";
 import { runMonteCarlo } from "../../simulation/combat.js";
 import { runGachaSimulation } from "../../simulation/gacha.js";
 import { runDpsSimulation } from "../../simulation/dps.js";
+import { difficultyCurve } from "../../simulation/difficulty.js";
 import { ok } from "./respond.js";
 
 const buildSpecSchema = z.object({
@@ -102,5 +103,19 @@ export function registerSimulationHandlers(server: McpServer) {
     },
     async ({ builds, iterations, seed }) =>
       ok(runDpsSimulation(builds, iterations, seed))
+  );
+
+  server.tool(
+    "run_difficulty_simulation",
+    "스테이지별 난이도 곡선 시뮬(스테이지마다 플레이어 vs 적 1:1 몬테카를로 → 승률·CI·평균턴·플레이타임·파워비)",
+    {
+      player: unitSchema,
+      stages: z.array(z.object({ label: z.string(), enemy: unitSchema })),
+      secondsPerTurn: z.number().default(1),
+      iterations: z.number().default(500),
+      seed: z.number().default(0),
+    },
+    async ({ player, stages, secondsPerTurn, iterations, seed }) =>
+      ok(difficultyCurve(player, stages, secondsPerTurn, iterations, seed))
   );
 }
