@@ -58,3 +58,8 @@ claude mcp add --transport stdio game-data-studio -- node --import tsx ./src/lib
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
 | 2026-06-09 | 초기 구성 | 전체 | PLANNING.md + wireframe.html 기반 하네스 구축 |
+| 2026-06-10 | schema-designer RPG 6종 전문화, game-schema 4종 추가(mmorpg/battle_rpg/roguelike_rpg/srpg) + 하이브리드 전개 패턴 | schema-designer.md, game-schema/ | Phase 0 RPG 전용 피벗 |
+| 2026-06-10 | balance-engineer 범위 확장 (gamefn/rng/stats/combat/gacha/dps 네이티브 TS 코어), model opus 통일(전 에이전트) | balance-engineer.md, qa-validator.md, schema-designer.md | Phase 2 실제 작업 이력 반영 |
+| 2026-06-10 | simulation 요청 유형 추가 (Stage A 코어→Stage B fullstack 2단계 파이프라인), schema 호출 model 명시 | game-data-feature/SKILL.md | Phase 2 반복 패턴 오케스트레이터 반영 |
+| 2026-06-10 | balance-algo 재작성: Wilson CI·mulberry32 RNG·가챠 소프트 천장·DPS MC 핵심화, C# references/로 격하 | balance-algo/SKILL.md | 네이티브 TS 엔진이 실제 구현 경로, C#은 보조 |
+| 2026-06-10 | game-schema 6종 장르를 references/genres/ 분리 (639줄→74줄), gds-ui SimulationView 유형 탭·Histogram·LineChart 패턴 추가, description "5개→8개 화면" 수정 | game-schema/, gds-ui/SKILL.md | 500줄 상한 준수, Phase 2 UI 패턴 반영 |

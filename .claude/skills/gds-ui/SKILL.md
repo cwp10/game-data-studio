@@ -1,6 +1,6 @@
 ---
 name: gds-ui
-description: Game Data Studio UI 컴포넌트 구현 가이드. 디자인 토큰, 5개 화면 구조, Tailwind 클래스 패턴, 공통 컴포넌트 패턴 제공. "UI 구현", "화면 수정", "컴포넌트 추가", "스타일 적용" 등 프론트엔드 작업 시 반드시 이 스킬을 사용한다. wireframe.html과 함께 사용하라.
+description: Game Data Studio UI 컴포넌트 구현 가이드. 디자인 토큰, 8개 화면 구조(프로젝트·스키마·데이터·밸런싱·시뮬레이션·경제·타입·메모리), Tailwind 클래스 패턴, 공통 컴포넌트 패턴 제공. "UI 구현", "화면 수정", "컴포넌트 추가", "스타일 적용" 등 프론트엔드 작업 시 반드시 이 스킬을 사용한다. wireframe.html과 함께 사용하라.
 ---
 
 ## 디자인 토큰 (Tailwind 클래스)
@@ -155,11 +155,48 @@ function MetricCard({ label, value, variant }: { label: string; value: string | 
 }
 ```
 
-### 코드 블록 (시뮬레이션)
+### SimulationView 유형 탭
+
+SimulationView는 단일 화면이 아닌 `type` 상태로 분기하는 다중 유형 패턴이다.
+
 ```tsx
-<div className="bg-[#f8f7f4] rounded-md px-3.5 py-3 font-mono text-[11px] leading-relaxed text-[#555] overflow-x-auto">
-  <pre>{csharpCode}</pre>
-</div>
+type SimType = 'saved' | 'stat' | 'combat' | 'gacha' | 'dps'
+// 추가 유형은 이 union에 추가하고 아래 조건 렌더를 확장한다
+
+{type === 'saved'  && <SavedSimPanel />}
+{type === 'stat'   && <StatCalculator />}
+{type === 'combat' && <CombatSimPanel />}
+{type === 'gacha'  && <GachaSimPanel />}
+{type === 'dps'    && <DpsSimPanel />}
+```
+
+유형 탭 버튼은 상단 툴바에 배치. 새 유형 추가 시 탭 목록과 조건 렌더만 확장하면 된다.
+
+### Histogram (자체 SVG, 공유 빈)
+
+Histogram은 외부 차트 라이브러리 없이 자체 SVG로 구현한다. 다중 시리즈를 공유 빈(global bins)으로 비교할 때는 `computeBins`로 먼저 빈 경계를 계산한 뒤 각 시리즈를 같은 빈에 할당한다.
+
+```tsx
+// src/components/chart/bins.ts — 순수함수
+export interface Bin { start: number; end: number; counts: number[] }
+export function computeBins(allValues: number[][], binCount = 20): Bin[]
+// allValues: [[시리즈A 값들], [시리즈B 값들], ...]
+// 전체 min/max로 공유 빈 경계 생성 → 시리즈별 count 배열
+
+// src/components/chart/Histogram.tsx
+// props: bins: Bin[], seriesColors: string[], width/height
+// SVG bar chart: 다중 시리즈를 같은 빈 내에서 나란히(grouped) 또는 쌓아서(stacked) 렌더
+```
+
+### LineChart (HP 추이)
+
+전투 시뮬 HP 추이에 사용. SVG polyline 기반.
+
+```tsx
+// props: traces: HpTracePoint[], width/height
+// HpTracePoint: { turn: number; attackerHp: number; defenderHp: number }
+// x축: turn, y축: HP, 두 라인(attacker/defender) 색상 구분
+// hpTrace.length >= 2 시에만 렌더 (1턴 즉사 시 생략)
 ```
 
 ---

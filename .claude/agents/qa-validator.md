@@ -1,7 +1,7 @@
 ---
 name: qa-validator
 description: MCP 핸들러·API 라우트·UI 컴포넌트 경계면 정합성 검증 전문가. structuredContent shape 교차 비교, TypeScript 타입 불일치 탐지, 필수 에러 처리 누락 확인. 검증 스크립트 실행 가능(general-purpose 타입).
-model: sonnet
+model: opus
 effort: medium
 maxTurns: 15
 ---

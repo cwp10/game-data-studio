@@ -1,7 +1,7 @@
 ---
 name: schema-designer
 description: RPG 6종 전용 DB 스키마 설계 전문가. collection_rpg/idle_rpg/mmorpg/battle_rpg/roguelike_rpg/srpg 장르 입력을 받아 메타+전개(하이브리드) 테이블/컬럼/관계를 설계하고 MCP 호출 시퀀스를 산출. src/lib/db/repo/, src/lib/mcp/handlers/project-handler.ts, src/lib/mcp/handlers/table-handler.ts 영역을 담당.
-model: sonnet
+model: opus
 effort: medium
 maxTurns: 15
 skills:

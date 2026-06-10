@@ -1,78 +1,30 @@
 ---
 name: balance-algo
-description: 게임 수치 밸런싱 알고리즘과 Unity C# 시뮬레이션 수식 산출 가이드. "이상값 감지", "밸런싱 분석", "analyze_balance 구현", "시뮬레이션 수식", "run_simulation 구현", "C# 코드 생성" 등 밸런싱/시뮬레이션 요청 시 반드시 이 스킬을 사용한다.
+description: 게임 수치 밸런싱·시뮬레이션 알고리즘 가이드. 이상값 감지(σ기반), 네이티브 TS 시뮬 엔진 패턴(Wilson CI·mulberry32 RNG·가챠 소프트 천장·DPS MC·expectedDamage 교차 앵커), Stage A 코어 구현 원칙 제공. "이상값 감지", "analyze_balance", "시뮬 코어 구현", "Wilson CI", "가챠 시뮬", "DPS 시뮬", "몬테카를로", "전투 시뮬" 요청 시 반드시 이 스킬을 사용한다.
+---
+
+## Stage A 원칙 — 코어 구현 시 반드시 지킨다
+
+1. **의존성 0**: 코어 파일(`src/lib/simulation/*.ts`, `src/lib/gamefn/`)은 Next.js/DB/MCP에 의존하지 않는다.
+2. **colocated test**: 모든 코어 파일에 `*.test.ts`를 함께 작성한다.
+3. **결정적 앵커 필수**: MC 평균 ≈ 이론값 하나로 끝내지 않는다. 반드시 `불변식 단언`(예: maxPulls ≤ cap)을 함께 작성한다. 틀린 모델이 평균 수렴으로 우연히 통과하는 경우를 차단.
+4. **재사용**: `rng.ts`(createRng/chance/randInt), `stats.ts`(wilsonCI), `gamefn`(damage/expectedDamage/dps) 재사용 — 재구현 금지.
+5. **게이트**: `npm test` 녹색 + `npx tsc --noEmit` 0 확인 후 Stage B 진입.
+
 ---
 
 ## 이상값 감지 알고리즘
 
 ### 핵심 원칙
-- 전체 평균이 아닌 **등급(grade) 별 그룹 통계** 사용
+- 전체 평균이 아닌 **등급(grade)별 그룹 통계** 사용
 - 그룹 내 평균 ± 2σ 초과 → warn, ± 3σ 초과 → danger
 - 누락값(0, null, undefined) → 자동으로 danger
 
-### 구현
+### 구현 (`src/lib/mcp/handlers/balance-handler.ts`)
 
 ```typescript
-// src/lib/mcp/handlers/balance-handler.ts
-
-interface ColumnStats {
-  column: string
-  mean: number
-  stddev: number
-  min: number
-  max: number
-  count: number
-}
-
-interface Anomaly {
-  row_id: string
-  row_data: Record<string, unknown>
-  column: string
-  value: number
-  severity: 'danger' | 'warn'
-  reason: string
-  expected_range: [number, number]
-}
-
-export async function handleAnalyzeBalance(args: {
-  table_id: string
-  columns: string[]       // 분석할 수치 컬럼
-  group_by?: string       // 보통 'grade'
-}) {
-  const rows = getRows(args.table_id)
-  const parsed = rows.map(r => ({ id: r.id, data: JSON.parse(r.data) }))
-
-  const anomalies: Anomaly[] = []
-  const statsMap: Record<string, ColumnStats> = {}
-
-  for (const col of args.columns) {
-    if (args.group_by) {
-      // 그룹별 통계
-      const groups = groupBy(parsed, r => String(r.data[args.group_by!]))
-      for (const [groupKey, groupRows] of Object.entries(groups)) {
-        const stats = calcStats(groupRows.map(r => Number(r.data[col])))
-        statsMap[`${col}:${groupKey}`] = { column: col, ...stats }
-        const found = detectAnomalies(groupRows, col, stats, groupKey)
-        anomalies.push(...found)
-      }
-    } else {
-      const stats = calcStats(parsed.map(r => Number(r.data[col])))
-      statsMap[col] = { column: col, ...stats }
-      anomalies.push(...detectAnomalies(parsed, col, stats))
-    }
-  }
-
-  // 밸런스 점수: 이상값 비율로 계산
-  const total = parsed.length * args.columns.length
-  const dangerCount = anomalies.filter(a => a.severity === 'danger').length
-  const warnCount   = anomalies.filter(a => a.severity === 'warn').length
-  const score = Math.max(0, Math.round(100 - (dangerCount * 10) - (warnCount * 3)))
-
-  return {
-    content: [{ type: 'text' as const, text: `분석 완료: 이상값 ${dangerCount}건, 경고 ${warnCount}건, 밸런스 점수 ${score}` }],
-    structuredContent: { anomalies, stats: statsMap, score, danger_count: dangerCount, warn_count: warnCount },
-  }
-}
+interface ColumnStats { column: string; mean: number; stddev: number; min: number; max: number; count: number }
+interface Anomaly { row_id: string; row_data: Record<string, unknown>; column: string; value: number; severity: 'danger' | 'warn'; reason: string; expected_range: [number, number] }
 
 function calcStats(values: number[]): Omit<ColumnStats, 'column'> {
   const valid = values.filter(v => !isNaN(v))
@@ -83,162 +35,103 @@ function calcStats(values: number[]): Omit<ColumnStats, 'column'> {
   return { mean, stddev: Math.sqrt(variance), min: Math.min(...valid), max: Math.max(...valid), count: n }
 }
 
-function detectAnomalies(
-  rows: Array<{ id: string; data: Record<string, unknown> }>,
-  col: string,
-  stats: Omit<ColumnStats, 'column'>,
-  groupLabel?: string
-): Anomaly[] {
-  const result: Anomaly[] = []
-  for (const row of rows) {
-    const raw = row.data[col]
-    const val = Number(raw)
-
-    // 누락값
-    if (raw === 0 || raw === null || raw === undefined) {
-      result.push({
-        row_id: row.id, row_data: row.data, column: col, value: val,
-        severity: 'danger',
-        reason: `누락값 의심 (0 또는 null)`,
-        expected_range: [stats.mean - 2 * stats.stddev, stats.mean + 2 * stats.stddev],
-      })
-      continue
-    }
-
-    const zScore = stats.stddev > 0 ? Math.abs(val - stats.mean) / stats.stddev : 0
-    if (zScore > 3) {
-      result.push({
-        row_id: row.id, row_data: row.data, column: col, value: val,
-        severity: 'danger',
-        reason: `${groupLabel ? groupLabel + ' 등급 ' : ''}평균(${Math.round(stats.mean)})의 ${(val / stats.mean).toFixed(1)}배 초과 (z=${zScore.toFixed(1)})`,
-        expected_range: [stats.mean - 2 * stats.stddev, stats.mean + 2 * stats.stddev],
-      })
-    } else if (zScore > 2) {
-      result.push({
-        row_id: row.id, row_data: row.data, column: col, value: val,
-        severity: 'warn',
-        reason: `${groupLabel ? groupLabel + ' 등급 ' : ''}평균 ±2σ 경계값 (z=${zScore.toFixed(1)})`,
-        expected_range: [stats.mean - stats.stddev, stats.mean + stats.stddev],
-      })
-    }
-  }
-  return result
-}
-
-function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
-  return arr.reduce((acc, item) => {
-    const k = key(item)
-    if (!acc[k]) acc[k] = []
-    acc[k].push(item)
-    return acc
-  }, {} as Record<string, T[]>)
-}
+// 밸런스 점수: 이상값 비율로 계산
+const score = Math.max(0, Math.round(100 - (dangerCount * 10) - (warnCount * 3)))
 ```
 
 ---
 
-## 시뮬레이션 수식 도출
+## 네이티브 TS 시뮬 엔진 패턴
 
-### 흐름
-```
-입력 테이블/컬럼 선택
-  → JOIN 연산 (relations 테이블 참조)
-  → 통계 분석 (평균, 분포)
-  → 수식 패턴 선택
-  → Unity C# 코드 산출
-  → 검증 케이스 생성
-```
-
-### 수식 패턴 라이브러리
-
-**전투 피해 (ATK vs DEF)**
-```csharp
-// 방어 계수 기반 피해 공식
-float defCoef = def / (def + 1200f);  // 1200은 조정 가능한 상수
-int baseDmg = Mathf.Max(1, Mathf.RoundToInt(atk * (1f - defCoef)));
-
-// 치명타
-bool isCrit = Random.value < critRate;
-int finalDmg = isCrit ? Mathf.RoundToInt(baseDmg * 1.5f) : baseDmg;
-
-// 필요 공격 횟수
-int hitsToKill = Mathf.CeilToInt(hp / (float)finalDmg);
-```
-
-**경험치 성장 곡선 (지수형)**
-```csharp
-// 레벨업 필요 경험치
-int RequiredExp(int level) => Mathf.RoundToInt(baseExp * Mathf.Pow(growthRate, level - 1));
-// baseExp: 1레벨 경험치, growthRate: 1.15~1.25 사이가 표준
-```
-
-**가챠 확률 (천장 포함)**
-```csharp
-float GetActualRate(int pityCount, float baseRate, int pityMax) {
-    float pityBonus = pityCount >= pityMax * 0.7f
-        ? (float)(pityCount - pityMax * 0.7f) / (pityMax * 0.3f) * (1f - baseRate)
-        : 0f;
-    return Mathf.Clamp01(baseRate + pityBonus);
-}
-```
-
-**방치형 골드 생산**
-```csharp
-long OfflineGold(long goldPerHour, float hoursOffline, float efficiencyRate = 0.5f) {
-    float cappedHours = Mathf.Min(hoursOffline, 12f);  // 12시간 캡
-    return Mathf.RoundToInt(goldPerHour * cappedHours * efficiencyRate);
-}
-```
-
-### run_simulation 구현 구조
+### mulberry32 시드 PRNG (`src/lib/simulation/rng.ts`)
 
 ```typescript
-export async function handleRunSimulation(args: {
-  project_id: string
-  name: string
-  input_tables: string[]  // table_id 목록
-  formula_type: 'combat' | 'exp_curve' | 'economy' | 'custom'
-  description: string
-}) {
-  // 1. 테이블 데이터 수집
-  const tableData = args.input_tables.map(tid => ({
-    table: getTable(tid),
-    rows: getRows(tid).map(r => ({ id: r.id, ...JSON.parse(r.data) })),
-    columns: getColumns(tid),
-  }))
+// XOR-shift 계열. 시드가 같으면 결과 동일(결정성) → 테스트 앵커 가능.
+export function createRng(seed: number): () => number { ... }
+export function chance(rng: () => number, p: number): boolean { return rng() < p }
+export function randInt(rng: () => number, min: number, max: number): number { return Math.floor(rng() * (max - min + 1)) + min }
+```
 
-  // 2. 통계 분석
-  const stats = analyzeForSimulation(tableData)
+시드 독립성: 빌드별/시행별로 `createRng(seed + index)`로 분리 → 병렬 시행이 서로 영향 없음.
 
-  // 3. 수식 도출 (Claude가 컨텍스트에서 직접 추론)
-  // 핸들러는 데이터+통계를 구조화해서 반환, Claude가 수식 결정
-  const context = {
-    formula_type: args.formula_type,
-    tables: tableData,
-    stats,
-    suggested_constants: deriveSuggestedConstants(stats),
-  }
+### Wilson 95% CI (`src/lib/simulation/stats.ts`)
 
-  // 4. 검증 케이스 생성
-  const testCases = generateTestCases(tableData, stats)
+```typescript
+// k=성공, n=시행. 정규근사보다 작은 표본·극단 비율에서 안정적.
+export function wilsonCI(k: number, n: number, z = 1.96): WilsonCI {
+  if (n <= 0) return { center: 0, low: 0, high: 0 }
+  const p = k / n, z2 = z * z, denom = 1 + z2 / n
+  const center = (p + z2 / (2 * n)) / denom
+  const margin = (z / denom) * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))
+  return { center, low: Math.max(0, center - margin), high: Math.min(1, center + margin) }
+}
+// 앵커: wilsonCI(50, 100) → low ≈ 0.404, high ≈ 0.596 (손계산 단언)
+```
 
-  return {
-    content: [{ type: 'text' as const, text: `시뮬레이션 컨텍스트 준비 완료. 수식을 도출하여 C# 코드를 생성하세요.` }],
-    structuredContent: { context, test_cases: testCases },
-  }
+### gamefn 순수 게임 함수 (`src/lib/gamefn/index.ts`)
+
+```typescript
+const DEF_CONST = 1200
+export function damage(atk: number, def: number, defConst = DEF_CONST): number {
+  return Math.max(1, Math.round(atk * (1 - def / (def + defConst))))
+}
+// 기대 데미지(크리 포함): base × (1 - r) + base × critMult × r
+export function expectedDamage(atk, def, critRate = 0, critMult = 1.5): number { ... }
+export function dps(perHitDmg, atkSpeed): number { return perHitDmg * Math.max(0, atkSpeed) }
+export function ehp(hp, def): number { return hp * (def + DEF_CONST) / DEF_CONST }
+export function ttk(targetHp, dpsVal): number { return dpsVal <= 0 ? Infinity : Math.ceil(targetHp / dpsVal) }
+```
+
+### 가챠 소프트 천장 (`src/lib/simulation/gacha.ts`)
+
+```typescript
+// per-pull 획득 확률 rate(i): i = 직전 획득 후 누적 뽑기 수(1-indexed)
+//   i <= s  → p (base_rate)
+//   s < i < N → 선형 램프: p + (1 - p) * (i - s) / (N - s)
+//   i >= N  → 1.0 (하드 보장; 위 식에 i=N 대입 시 동일)
+export function rate(i, baseRate, pityStart, pityCap): number { ... }
+
+// 매 시행 독립 시드: createRng(seed + run)
+// 앵커:
+//   maxPulls <= pityCap  (★핵심 불변식 — 절대 넘지 않음)
+//   baseRate=1 → avgPulls==1, maxPulls==1
+//   rate(s) = p, rate(N) = 1.0 (단위 테스트)
+//   같은 seed → 동일 결과
+```
+
+### DPS 빌드 비교 MC (`src/lib/simulation/dps.ts`)
+
+```typescript
+// gamefn.damage(atk, def) + chance(rng, critRate) 재사용
+// 앵커:
+//   mean ≈ gamefn.expectedDamage(atk, def, critRate, critMult)  (★독립 교차검증)
+//   critRate=0 → min==max==base (분산 0)
+//   critRate=1 → 모두 base × critMult
+//   같은 seed → 동일 결과
+```
+
+### API action 라우팅 패턴 (`src/app/api/simulation/route.ts`)
+
+```typescript
+// POST 본문: { action: "montecarlo" | "gacha" | "dps", ...params }
+export async function POST(request: Request) {
+  const body = await request.json()
+  if (body.action === 'montecarlo') { const result = runMonteCarlo(...); return NextResponse.json(result) }
+  if (body.action === 'gacha')      { const result = runGachaSimulation(...); return NextResponse.json(result) }
+  if (body.action === 'dps')        { const result = runDpsSimulation(...); return NextResponse.json(result) }
+  // 기존 run/save/list 분기 보존
 }
 ```
 
----
-
-## AI 밸런싱 제안 포맷
-
-Claude가 analyze_balance 결과를 받아 제안할 때 이 포맷을 사용한다:
+### AI 밸런싱 제안 포맷
 
 ```
 현재 {value}은 {grade} 등급 평균({mean})의 {ratio}배입니다.
 권장 범위: {mean - 2σ} ~ {mean + 2σ} (±1σ 기준)
 수정 제안: {recommended_value} ({reason})
 ```
-
 근거 없는 제안 금지. 반드시 통계 수치(평균, σ)와 함께 제시한다.
+
+---
+
+Unity C# 코드 산출이 필요한 경우 `references/csharp-formulas.md` 참조.
