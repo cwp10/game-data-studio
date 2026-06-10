@@ -5,6 +5,7 @@ import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Selec
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
 import { computeCurve, type CurveType } from "@/lib/curve/generate";
+import { solveCurve } from "@/lib/curve/solve";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
@@ -43,6 +44,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
   const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true });
+  const [solveTargetLevel, setSolveTargetLevel] = useState("");
+  const [solveTargetValue, setSolveTargetValue] = useState("");
+  const [solveResult, setSolveResult] = useState<{ ok: boolean; achievedValue?: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickedRowRef = useRef<string | null>(null);
@@ -351,6 +355,14 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     if (![base, factor, count].every(Number.isFinite) || count < 1) return [];
     return computeCurve({ type: curve.type, base, factor, count: Math.min(count, 200) });
   })();
+
+  // 목표값으로 factor 역산 (클라이언트 순수 함수, type/base 는 모달 현재 값 사용)
+  const runSolve = () => {
+    const r = solveCurve(curve.type, Number(curve.base), Number(solveTargetLevel), Number(solveTargetValue));
+    if (!r.solved) { setSolveResult({ ok: false }); return; }
+    setCurve({ ...curve, factor: String(r.factor) });
+    setSolveResult({ ok: true, achievedValue: r.achievedValue });
+  };
 
   const runCurve = async () => {
     if (!selectedId || !curve.value_column.trim()) return;
@@ -790,6 +802,29 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             <div>
               <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
               <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
+            </div>
+          </div>
+
+          {/* 목표값으로 역산 */}
+          <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
+            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">목표값으로 역산</div>
+            <div className="text-[10px] text-[#6b6b77]">현재 타입·base 기준으로 목표 레벨에서 목표값이 되는 factor 를 계산합니다.</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[11px] text-[#9a9aa3] mb-1">목표 레벨</div>
+                <Input placeholder="예: 30" value={solveTargetLevel} onChange={(e) => { setSolveTargetLevel(e.target.value); setSolveResult(null); }} />
+              </div>
+              <div>
+                <div className="text-[11px] text-[#9a9aa3] mb-1">목표값</div>
+                <Input placeholder="예: 100000" value={solveTargetValue} onChange={(e) => { setSolveTargetValue(e.target.value); setSolveResult(null); }} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Btn onClick={runSolve} disabled={!solveTargetLevel.trim() || !solveTargetValue.trim()}><Sparkles size={11} />factor 역산</Btn>
+              {solveResult && (solveResult.ok
+                ? <div className="text-[10px] text-[#4ade80]">factor 적용됨 · 도달값 {solveResult.achievedValue?.toLocaleString()}</div>
+                : <div className="text-[10px] text-[#f87171]">해 없음 (목표 도달 불가 / 레벨 1)</div>
+              )}
             </div>
           </div>
 

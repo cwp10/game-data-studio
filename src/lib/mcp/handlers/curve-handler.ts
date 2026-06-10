@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { generateCurveIntoTable } from "../../curve/apply.js";
+import { solveCurve } from "../../curve/solve.js";
 import { ok } from "./respond.js";
 
 export function registerCurveHandlers(server: McpServer) {
@@ -20,5 +21,18 @@ export function registerCurveHandlers(server: McpServer) {
     },
     async ({ table_id, value_column, level_column, type, base, factor, count, round, replace }) =>
       ok(generateCurveIntoTable({ table_id, value_column, level_column: level_column ?? "level", type, base, factor, count, round, replace }))
+  );
+
+  server.tool(
+    "solve_curve",
+    "목표값 역산. targetLevel 에서 targetValue 가 되도록 base/type 고정 후 factor 를 이분 역산. 반환: { solved, factor, achievedValue }. 해 없으면 solved=false",
+    {
+      type: z.enum(["linear", "power", "exponential"]),
+      base: z.number(),
+      targetLevel: z.number(),
+      targetValue: z.number(),
+    },
+    async ({ type, base, targetLevel, targetValue }) =>
+      ok(solveCurve(type, base, targetLevel, targetValue))
   );
 }

@@ -5,7 +5,7 @@ import { SectionLabel } from "@/components/ui";
 import { LineChart } from "@/components/chart/LineChart";
 import { projectEconomy } from "@/lib/economy/project";
 
-interface Entry { id: number; name: string; amount: string; every: string }
+interface Entry { id: number; name: string; amount: string; every: string; growth?: string }
 
 const seedSources = (): Entry[] => [
   { id: 1, name: "일일 퀘스트", amount: "300", every: "1" },
@@ -23,6 +23,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
   const [sinks, setSinks] = useState<Entry[]>(seedSinks);
   const [days, setDays] = useState("30");
   const [start, setStart] = useState("0");
+  const [inflation, setInflation] = useState("0");
   const [scenarios, setScenarios] = useState<{ id: string; name: string; updated_at: number }[]>([]);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
   const idRef = useRef(100);
@@ -42,7 +43,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
   const saveScenario = async () => {
     const name = prompt("시나리오 이름:");
     if (!name) return;
-    const data = { sources, sinks, days, start };
+    const data = { sources, sinks, days, start, inflation };
     const s = await fetch("/api/economy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -58,7 +59,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
     await fetch("/api/economy", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: activeScenarioId, data: { sources, sinks, days, start } }),
+      body: JSON.stringify({ id: activeScenarioId, data: { sources, sinks, days, start, inflation } }),
     }).catch((e) => console.error(e));
   };
   useEffect(() => {
@@ -67,7 +68,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
     autoSaveTimer.current = setTimeout(autoSave, 800);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
     // eslint-disable-next-line
-  }, [sources, sinks, days, start, activeScenarioId]);
+  }, [sources, sinks, days, start, inflation, activeScenarioId]);
 
   // 시나리오 불러오기
   const loadScenario = (s: { id: string; name: string; data?: string }) => {
@@ -78,6 +79,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
       if (Array.isArray(d.sinks)) { setSinks(d.sinks); syncIdRef(d.sinks); }
       if (typeof d.days === "string") setDays(d.days);
       if (typeof d.start === "string") setStart(d.start);
+      setInflation(typeof d.inflation === "string" ? d.inflation : "0");
     } catch { /* ignore */ }
   };
 
@@ -95,8 +97,8 @@ export function EconomySim({ projectId }: { projectId: string }) {
 
   // 일자별 투영 계산 (코어 로직은 lib/economy/project)
   const N = Math.max(1, Math.min(num(days, 30), 365));
-  const toEntries = (list: Entry[]) => list.map((e) => ({ amount: num(e.amount), every: Math.max(1, num(e.every, 1)) }));
-  const { balSeries, incSeries, spSeries, cumInc, cumSp, net, finalBalance: bal } = projectEconomy(toEntries(sources), toEntries(sinks), N, num(start));
+  const toEntries = (list: Entry[]) => list.map((e) => ({ amount: num(e.amount), every: Math.max(1, num(e.every, 1)), growth: num(e.growth ?? "") }));
+  const { balSeries, realBalSeries, incSeries, spSeries, cumInc, cumSp, net, finalBalance: bal } = projectEconomy(toEntries(sources), toEntries(sinks), N, num(start), num(inflation));
   const xLabels = Array.from({ length: N }, (_, i) => String(i + 1));
 
   const entryRows = (list: Entry[], set: typeof setSources, isSource: boolean) => (
@@ -111,6 +113,12 @@ export function EconomySim({ projectId }: { projectId: string }) {
             <input value={e.every} onChange={(ev) => update(set, e.id, { every: ev.target.value })}
               className="w-10 bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-1.5 py-1 text-[11px] text-right text-[#ededed] outline-none" />
             일마다
+          </div>
+          <div className="flex items-center gap-1 text-[10px] text-[#6b6b77]">
+            <input value={e.growth ?? ""} onChange={(ev) => update(set, e.id, { growth: ev.target.value })} placeholder="0"
+              title="발생 주기마다 복리 증감율 (예: 0.05)"
+              className="w-12 bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-1.5 py-1 text-[11px] text-right text-[#ededed] outline-none" />
+            증감
           </div>
           <button onClick={() => remove(set, e.id)} className="text-[#3a3a42] hover:text-[#f87171] p-0.5"><X size={13} /></button>
         </div>
@@ -147,7 +155,7 @@ export function EconomySim({ projectId }: { projectId: string }) {
           ))}
           <div
             className="px-3 py-2.5 text-xs text-[#4a4a55] cursor-pointer hover:bg-[#1e1e24]"
-            onClick={() => { setActiveScenarioId(null); setSources(seedSources()); setSinks(seedSinks()); setDays("30"); setStart("0"); }}
+            onClick={() => { setActiveScenarioId(null); setSources(seedSources()); setSinks(seedSinks()); setDays("30"); setStart("0"); setInflation("0"); }}
           >
             ＋ 새 시나리오
           </div>
@@ -179,6 +187,8 @@ export function EconomySim({ projectId }: { projectId: string }) {
             <input value={days} onChange={(e) => setDays(e.target.value)} className="w-16 bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-right text-[#ededed] outline-none" /></label>
           <label className="flex items-center gap-2 text-[11px] text-[#9a9aa3]">시작 잔액
             <input value={start} onChange={(e) => setStart(e.target.value)} className="w-24 bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-right text-[#ededed] outline-none" /></label>
+          <label className="flex items-center gap-2 text-[11px] text-[#9a9aa3]" title="주기(일)별 인플레율 (예: 0.01). 실질 잔액 계산에 사용.">인플레율
+            <input value={inflation} onChange={(e) => setInflation(e.target.value)} placeholder="0" className="w-20 bg-[#0f0f10] border border-[#2a2a2f] rounded-md px-2 py-1 text-[11px] text-right text-[#ededed] outline-none" /></label>
         </div>
 
         {/* 메트릭 */}
@@ -204,7 +214,8 @@ export function EconomySim({ projectId }: { projectId: string }) {
               height={240}
               xLabels={xLabels}
               series={[
-                { name: "잔액", color: "#7c3aed", values: balSeries },
+                { name: "명목 잔액", color: "#7c3aed", values: balSeries },
+                { name: "실질 잔액", color: "#38bdf8", values: realBalSeries },
                 { name: "누적 수입", color: "#4ade80", values: incSeries },
                 { name: "누적 지출", color: "#f87171", values: spSeries },
               ]}
