@@ -1,210 +1,299 @@
 "use client";
 import { useState } from "react";
-import { Sparkles, ChevronLeft, X, Loader2, ArrowRight, Database, Plus } from "lucide-react";
+import { Sparkles, X, Plus, Loader2, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Btn, Input } from "@/components/ui";
+import { GENRES, SEED_TEMPLATES } from "@/lib/genre-seeds";
 
-interface Option { label: string; hint?: string }
-interface Step { question: string; options: Option[]; canFinish: boolean }
-interface PlanColumn { name: string; type: string; description?: string }
-interface PlanTable { name: string; description?: string; columns?: PlanColumn[] }
-interface Plan { name: string; genre: string; description: string; tables: PlanTable[] }
+interface StepDef {
+  question: string;
+  options: { label: string; hint: string }[];
+}
 
-// 계약 §1: RPG 6종 (코드·라벨·힌트). L1 카드는 이 6개 그대로, 순서 유지, 2열 그리드.
-const GENRES: { code: string; label: string; hint: string }[] = [
-  { code: "collection_rpg", label: "수집형 RPG", hint: "캐릭터 수집·가챠·성장" },
-  { code: "idle_rpg", label: "방치형 RPG", hint: "자동 전투·방치 보상·경제" },
-  { code: "mmorpg", label: "MMORPG", hint: "직업·장비 강화·던전·거래소" },
-  { code: "battle_rpg", label: "턴제/액션 RPG", hint: "속성 상성·스킬·챕터" },
-  { code: "roguelike_rpg", label: "로그라이크 RPG", hint: "런/층 스케일링·아이템 시너지" },
-  { code: "srpg", label: "SRPG (전략)", hint: "유닛 성장률·무기 상성·그리드" },
+const PREDEFINED_STEPS: StepDef[] = [
+  {
+    question: "핵심 성장 구조는 무엇인가요?",
+    options: [
+      { label: "레벨 성장", hint: "XP·레벨업·스탯 증가" },
+      { label: "장비·강화", hint: "장비 파밍·강화·세공" },
+      { label: "스킬 트리", hint: "스킬 포인트·분기 성장" },
+      { label: "수집·합성", hint: "캐릭터 수집·진화·합성" },
+    ],
+  },
+  {
+    question: "전투 방식은 무엇인가요?",
+    options: [
+      { label: "자동 전투", hint: "방치·오프라인 진행" },
+      { label: "턴제", hint: "행동 순서·전략적 선택" },
+      { label: "실시간 액션", hint: "즉각 조작·스킬 타이밍" },
+      { label: "전략 배치", hint: "그리드·유닛 포지셔닝" },
+    ],
+  },
+  {
+    question: "핵심 콘텐츠는 무엇인가요?",
+    options: [
+      { label: "스토리·챕터", hint: "메인 퀘스트·서사 중심" },
+      { label: "던전·레이드", hint: "파티 플레이·보스 전투" },
+      { label: "PvP·경쟁", hint: "랭킹·아레나·토너먼트" },
+      { label: "길드·협력", hint: "협력 콘텐츠·공성전" },
+    ],
+  },
+  {
+    question: "경제 시스템을 선택하세요",
+    options: [
+      { label: "가챠·뽑기", hint: "확률형 아이템·천장 시스템" },
+      { label: "시즌 패스", hint: "기간 한정 보상·배틀패스" },
+      { label: "아이템 거래", hint: "유저 간 거래·경매장" },
+      { label: "직접 구매", hint: "상점·꾸미기·확장팩" },
+    ],
+  },
 ];
 
-// 계약 §4: 장르별 ★ 주력 시뮬 요약 (plan 미리보기 안내용)
-const SIM_SUMMARY: Record<string, string[]> = {
-  collection_rpg: ["가챠", "전투", "스탯 계산기"],
-  idle_rpg: ["경제+인플레이션", "난이도/플레이타임"],
-  mmorpg: ["경제+인플레이션", "DPS 분산(레이드)", "PvP 승률 매트릭스"],
-  battle_rpg: ["전투", "스탯 계산기", "DPS 분산", "난이도/플레이타임"],
-  roguelike_rpg: ["전투(런)", "DPS 분산(빌드)", "난이도(층)"],
-  srpg: ["전투", "스탯 계산기", "난이도/플레이타임"],
-};
+// 0 = 장르, 1~N = PREDEFINED_STEPS, N+1 = 이름 입력
+const TOTAL_SELECTION_STEPS = 1 + PREDEFINED_STEPS.length; // 5
 
-const L1_QUESTION = "어떤 장르의 게임인가요?";
+const STEP_LABELS = ["성장", "전투", "콘텐츠", "경제"];
 
 export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string, name: string) => void }) {
-  const [step, setStep] = useState<Step | null>(null);
-  const [genre, setGenre] = useState("");
-  const [path, setPath] = useState<string[]>([]);
-  const [stack, setStack] = useState<Step[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [genreSelections, setGenreSelections] = useState<string[]>([]);
+  const [stepSelections, setStepSelections] = useState<string[][]>(
+    PREDEFINED_STEPS.map(() => [])
+  );
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // genreCode: L1 카드 클릭 시 명시 전달(같은 핸들러에서 state는 아직 반영 전이므로).
-  const pick = async (label: string, genreCode?: string) => {
-    const g = genreCode ?? genre;
-    const newPath = [...path, label];
-    setLoading(true); setError(null);
-    try {
-      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: newPath, genre: g }) }).then((r) => r.json());
-      if (d.error || d.type !== "choices") throw new Error(d.error ?? "");
-      if (genreCode) setGenre(genreCode);
-      if (step) setStack((s) => [...s, step]);
-      setPath(newPath);
-      setStep({ question: d.question, options: d.options ?? [], canFinish: !!d.canFinish });
-    } catch { setError("선택지를 불러오지 못했습니다. 다시 시도해주세요."); }
-    finally { setLoading(false); }
+  const isNameStep = stepIndex === TOTAL_SELECTION_STEPS;
+
+  const toggleGenre = (code: string) => {
+    setGenreSelections((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  };
+
+  const toggleOption = (label: string, sIdx: number) => {
+    setStepSelections((prev) => {
+      const next = prev.map((s) => [...s]);
+      next[sIdx] = next[sIdx].includes(label)
+        ? next[sIdx].filter((l) => l !== label)
+        : [...next[sIdx], label];
+      return next;
+    });
+  };
+
+  const next = () => {
+    if (stepIndex === 0 && genreSelections.length === 0) return;
+    if (isNameStep) return;
+    // 이름 단계 진입 직전: 이름 자동 제안
+    if (stepIndex === TOTAL_SELECTION_STEPS - 1) {
+      const labels = genreSelections.map((c) => GENRES.find((g) => g.code === c)?.label ?? c);
+      setName(genreSelections.length === 1 ? `${labels[0]} 프로젝트` : "하이브리드 RPG 프로젝트");
+    }
+    setStepIndex((i) => i + 1);
   };
 
   const back = () => {
-    if (plan) { setPlan(null); return; }
-    if (stack.length === 0) {
-      // L1(장르 선택)으로 복귀
-      setPath([]); setGenre(""); setStep(null); return;
-    }
-    setPath((p) => p.slice(0, -1));
-    setStep(stack[stack.length - 1]);
-    setStack((s) => s.slice(0, -1));
-  };
-
-  const finish = async () => {
-    setLoading(true); setError(null);
-    try {
-      const d = await fetch("/api/genre-wizard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices: path, finish: true, genre }) }).then((r) => r.json());
-      if (d.error || d.type !== "plan") throw new Error(d.error ?? "");
-      setPlan(d); setName(d.name ?? "");
-    } catch { setError("컨셉 생성에 실패했습니다. 다시 시도해주세요."); }
-    finally { setLoading(false); }
+    if (stepIndex === 0) return;
+    setError(null);
+    setStepIndex((i) => i - 1);
   };
 
   const create = async () => {
-    if (!name.trim() || !plan) return;
-    setCreating(true);
-    const p = await fetch("/api/projects/scaffold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...plan, name: name.trim(), genre }) }).then((r) => r.json());
+    if (!name.trim()) return;
+    setCreating(true); setError(null);
+    const genreDisplay = genreSelections
+      .map((c) => GENRES.find((g) => g.code === c)?.label ?? c)
+      .join(" + ");
+    const descParts = stepSelections
+      .map((ss, i) => ss.length > 0 ? `${STEP_LABELS[i]}: ${ss.join("·")}` : null)
+      .filter(Boolean);
+    const p = await fetch("/api/projects/scaffold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        genre: genreDisplay,
+        description: descParts.length > 0 ? descParts.join(" | ") : undefined,
+        genreCodes: genreSelections,
+      }),
+    }).then((r) => r.json());
     setCreating(false);
     if (p?.id) onCreated(p.id, p.name);
     else setError("생성에 실패했습니다.");
   };
 
-  // plan.genre 는 backend가 코드로 덮어쓰므로(라인 343-344) 라벨 표시는 GENRES 조회로.
-  const genreLabel = GENRES.find((g) => g.code === genre)?.label ?? plan?.genre ?? "";
+  const tableCount = new Set(
+    genreSelections.flatMap((c) => (SEED_TEMPLATES[c] ?? []).map((t) => t.name))
+  ).size;
+
+  const genreChip = genreSelections
+    .map((c) => (GENRES.find((g) => g.code === c)?.label ?? c).replace(" RPG", "").replace(" (전략)", ""))
+    .join(" + ");
+
+  const curSelections = stepIndex > 0 && !isNameStep ? stepSelections[stepIndex - 1] : [];
+  const canNext = stepIndex === 0 ? genreSelections.length > 0 : true;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6" onClick={onClose}>
       <div className="bg-[#16161a] border border-[#2a2a2f] rounded-2xl shadow-2xl w-[640px] max-w-full max-h-[88vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+
         {/* 헤더 */}
         <div className="px-5 py-3.5 border-b border-[#2a2a2f] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles size={15} className="text-[#8b5cf6] flex-shrink-0" />
-            <span className="text-[13px] font-semibold text-[#ededed]">새 프로젝트</span>
-            {path.length > 0 && (
-              <span className="text-[11px] text-[#6b6b77] truncate">· {path.join(" › ")}</span>
+            <span className="text-[13px] font-semibold text-[#ededed] flex-shrink-0">새 프로젝트</span>
+            {genreSelections.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e1b4b] text-[#c4b5fd] border border-[#7c3aed]/30 flex-shrink-0 max-w-[200px] truncate">
+                {genreChip}
+              </span>
             )}
           </div>
-          <button onClick={onClose} className="text-[#6b6b77] hover:text-[#ededed] p-1"><X size={15} /></button>
+          {/* 진행 도트 */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-1">
+              {Array.from({ length: TOTAL_SELECTION_STEPS + 1 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`rounded-full transition-all duration-200 ${
+                    i === stepIndex
+                      ? "w-4 h-1.5 bg-[#8b5cf6]"
+                      : i < stepIndex
+                      ? "w-1.5 h-1.5 bg-[#5b21b6]/60"
+                      : "w-1.5 h-1.5 bg-[#2a2a2f]"
+                  }`}
+                />
+              ))}
+            </div>
+            <button onClick={onClose} className="text-[#6b6b77] hover:text-[#ededed] p-1"><X size={15} /></button>
+          </div>
         </div>
 
         {/* 본문 */}
         <div className="flex-1 overflow-auto p-5">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#6b6b77]">
-              <Loader2 size={22} className="animate-spin text-[#8b5cf6]" />
-              <span className="text-[12px]">AI가 다음 선택지를 구성하는 중…</span>
-            </div>
-          ) : plan ? (
-            /* 플랜 미리보기 */
-            <div className="space-y-4">
-              <div>
-                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">제안된 컨셉</div>
-                <div className="text-[11px] text-[#6b6b77] mb-1">프로젝트명</div>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
-                <div className="text-[10px] text-[#c4b5fd] mt-2">{genreLabel}</div>
-                <div className="text-[12px] text-[#9a9aa3] leading-relaxed mt-1.5">{plan.description}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">생성될 스키마 · 테이블 {plan.tables.length}개</div>
-                <div className="space-y-1.5">
-                  {plan.tables.map((t) => (
-                    <div key={t.name} className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <Database size={11} className="text-[#8b5cf6]" />
-                        <span className="text-[12px] font-medium text-[#ededed]">{t.name}</span>
-                        <span className="text-[10px] text-[#4a4a55]">{t.columns?.length ?? 0}컬럼</span>
-                      </div>
-                      {t.columns && t.columns.length > 0 && (
-                        <div className="text-[10px] text-[#6b6b77] mt-1 truncate">{t.columns.map((c) => c.name).join(", ")}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {SIM_SUMMARY[genre] && (
-                <div>
-                  <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">주력 시뮬레이션</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {SIM_SUMMARY[genre].map((s, i) => (
-                      <span key={s} className={`text-[10px] px-2 py-0.5 rounded-md border ${i === 0 ? "bg-[#15101f] border-[#2d1b4d] text-[#c4b5fd]" : "bg-[#0f0f10] border-[#2a2a2f] text-[#6b6b77]"}`}>
-                        {s}{i === 0 ? " ★" : ""}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {error && <div className="text-[11px] text-[#f87171]">{error}</div>}
-              <div className="flex justify-between pt-1">
-                <Btn onClick={back}><ChevronLeft size={11} />뒤로</Btn>
-                <Btn variant="primary" onClick={create} disabled={creating || !name.trim()}>
-                  {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}{creating ? "생성 중…" : "이 컨셉으로 생성"}
-                </Btn>
-              </div>
-            </div>
-          ) : (
-            /* 선택 단계 */
+
+          {/* ── Step 0: 장르 ── */}
+          {stepIndex === 0 && (
             <div>
-              <div className="text-[13px] font-medium text-[#ededed] mb-3">{step ? step.question : L1_QUESTION}</div>
-              <div className="grid grid-cols-2 gap-2">
-                {step
-                  ? step.options.map((o) => (
-                      <button
-                        key={o.label}
-                        onClick={() => pick(o.label)}
-                        className="text-left bg-[#0f0f10] border border-[#2a2a2f] rounded-xl px-3.5 py-3 hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c] transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-medium text-[#ededed]">{o.label}</span>
-                          <ArrowRight size={12} className="text-[#3a3a42] group-hover:text-[#8b5cf6] transition-colors" />
-                        </div>
-                        {o.hint && <div className="text-[10px] text-[#6b6b77] mt-0.5 leading-relaxed">{o.hint}</div>}
-                      </button>
-                    ))
-                  : GENRES.map((g) => (
-                      <button
-                        key={g.code}
-                        onClick={() => pick(g.label, g.code)}
-                        className="text-left bg-[#0f0f10] border border-[#2a2a2f] rounded-xl px-3.5 py-3 hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c] transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-medium text-[#ededed]">{g.label}</span>
-                          <ArrowRight size={12} className="text-[#3a3a42] group-hover:text-[#8b5cf6] transition-colors" />
-                        </div>
-                        <div className="text-[10px] text-[#6b6b77] mt-0.5 leading-relaxed">{g.hint}</div>
-                      </button>
-                    ))}
-              </div>
-
-              {error && <div className="text-[11px] text-[#f87171] mt-3">{error}</div>}
-
-              <div className="flex justify-between pt-4">
-                <Btn disabled={path.length === 0} onClick={back}><ChevronLeft size={11} />뒤로</Btn>
-                {path.length > 0 && (
-                  <Btn variant="primary" onClick={finish}><Sparkles size={11} />이 컨셉으로 만들기</Btn>
-                )}
+              <div className="text-[13px] font-medium text-[#ededed] mb-1">어떤 장르의 게임인가요?</div>
+              <div className="text-[11px] text-[#4a4a55] mb-4">장르를 기반으로 기본 테이블 뼈대가 결정됩니다. 복수 선택 가능.</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {GENRES.map((g) => {
+                  const isSelected = genreSelections.includes(g.code);
+                  const tc = (SEED_TEMPLATES[g.code] ?? []).length;
+                  return (
+                    <button
+                      key={g.code}
+                      onClick={() => toggleGenre(g.code)}
+                      className={`text-left rounded-xl px-4 py-4 transition-all border ${
+                        isSelected ? "bg-[#16101f] border-[#7c3aed]" : "bg-[#0f0f10] border-[#2a2a2f] hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="text-[13px] font-semibold text-[#ededed] leading-tight">{g.label}</span>
+                        {isSelected
+                          ? <Check size={14} className="text-[#8b5cf6] flex-shrink-0 mt-0.5" />
+                          : <span className="text-[10px] text-[#3a3a42] flex-shrink-0 mt-0.5 tabular-nums">{tc}테이블</span>
+                        }
+                      </div>
+                      <div className="text-[11px] text-[#6b6b77] leading-relaxed">{g.hint}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
+
+          {/* ── Step 1~N: 사전 정의 단계 ── */}
+          {stepIndex > 0 && !isNameStep && (
+            <div>
+              <div className="text-[13px] font-medium text-[#ededed] mb-1">
+                {PREDEFINED_STEPS[stepIndex - 1].question}
+              </div>
+              <div className="text-[11px] text-[#4a4a55] mb-4">복수 선택 가능. 건너뛰어도 됩니다.</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {PREDEFINED_STEPS[stepIndex - 1].options.map((o) => {
+                  const isSelected = curSelections.includes(o.label);
+                  return (
+                    <button
+                      key={o.label}
+                      onClick={() => toggleOption(o.label, stepIndex - 1)}
+                      className={`text-left rounded-xl px-4 py-4 transition-all border ${
+                        isSelected ? "bg-[#16101f] border-[#7c3aed]" : "bg-[#0f0f10] border-[#2a2a2f] hover:border-[#7c3aed]/50 hover:bg-[#1a1a1c]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="text-[13px] font-semibold text-[#ededed] leading-tight">{o.label}</span>
+                        {isSelected && <Check size={14} className="text-[#8b5cf6] flex-shrink-0 mt-0.5" />}
+                      </div>
+                      <div className="text-[11px] text-[#6b6b77] leading-relaxed">{o.hint}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── 이름 입력 (마지막) ── */}
+          {isNameStep && (
+            <div className="space-y-4">
+              <div>
+                <div className="text-[13px] font-medium text-[#ededed] mb-1">프로젝트 이름을 정해주세요</div>
+                <div className="text-[11px] text-[#4a4a55] mb-3">
+                  장르 기반 {tableCount}개 테이블이 즉시 생성됩니다.
+                </div>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="프로젝트 이름"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && !creating && name.trim() && create()}
+                />
+              </div>
+
+              {/* 선택 요약 */}
+              <div>
+                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest mb-2">선택 요약</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {genreSelections.map((c) => (
+                    <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-[#1e1b4b] text-[#c4b5fd] border border-[#7c3aed]/30">
+                      {GENRES.find((g) => g.code === c)?.label}
+                    </span>
+                  ))}
+                  {stepSelections.flatMap((ss, i) => ss.map((label) => ({ label, i }))).map(({ label, i }) => (
+                    <span key={`${i}-${label}`} className="text-[10px] px-2 py-0.5 rounded-full bg-[#0f0f10] text-[#6b6b77] border border-[#2a2a2f]">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {error && <div className="text-[11px] text-[#f87171]">{error}</div>}
+            </div>
+          )}
+
         </div>
+
+        {/* 하단 네비게이션 */}
+        <div className="px-5 py-3 border-t border-[#2a2a2f] flex items-center justify-between flex-shrink-0">
+          <Btn disabled={stepIndex === 0} onClick={back}>
+            <ChevronLeft size={11} />뒤로
+          </Btn>
+          <div className="flex gap-2">
+            {!isNameStep && (
+              <Btn variant="primary" disabled={!canNext} onClick={next}>
+                {stepIndex === TOTAL_SELECTION_STEPS - 1 ? "이름 입력" : "다음"}
+                <ChevronRight size={11} />
+              </Btn>
+            )}
+            {isNameStep && (
+              <Btn variant="primary" onClick={create} disabled={creating || !name.trim()}>
+                {creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                {creating ? "생성 중…" : `기본 뼈대 생성 (${tableCount}테이블)`}
+              </Btn>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );
