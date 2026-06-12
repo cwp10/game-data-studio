@@ -3,6 +3,8 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 
+app.setName("Game Data Studio");
+
 const PROJECT_DIR = path.resolve(__dirname, "..");
 const PORT = 3001;
 const URL = `http://127.0.0.1:${PORT}`;
