@@ -9,7 +9,19 @@ import { runGachaSimulation } from "../../simulation/gacha.js";
 import { runDpsSimulation } from "../../simulation/dps.js";
 import { difficultyCurve } from "../../simulation/difficulty.js";
 import { winRateMatrix } from "../../balance/correlate.js";
+import { simulatePacing } from "../../simulation/pacing.js";
 import { ok } from "./respond.js";
+
+const curveParamsSchema = z.object({
+  type: z.enum(["linear", "power", "exponential", "logarithmic", "quadratic", "s_curve"]),
+  base: z.number(),
+  factor: z.number(),
+  count: z.number(),
+  round: z.boolean().optional(),
+  range: z.number().optional(),
+  rate: z.number().optional(),
+  midpoint: z.number().optional(),
+});
 
 const buildSpecSchema = z.object({
   name: z.string(),
@@ -138,5 +150,24 @@ export function registerSimulationHandlers(server: McpServer) {
     },
     async ({ units, iterations, seed, maxUnits }) =>
       ok(winRateMatrix(units, iterations, seed, maxUnits))
+  );
+
+  server.tool(
+    "run_pacing_simulation",
+    "N일치 진척도 페이싱 시뮬 — 레벨/스테이지/골드 타임라인 산출",
+    {
+      hpCurve: curveParamsSchema,
+      atkCurve: curveParamsSchema,
+      defCurve: curveParamsSchema.optional(),
+      expCurve: curveParamsSchema,
+      upgradeCostCurve: curveParamsSchema,
+      stages: z.array(z.object({ label: z.string(), enemy: unitSchema })),
+      expPerStage: z.number().default(50),
+      goldPerStage: z.number().default(100),
+      days: z.number().default(30),
+      attemptsPerDay: z.number().default(10),
+      seed: z.number().default(0),
+    },
+    async (args) => ok(simulatePacing(args))
   );
 }

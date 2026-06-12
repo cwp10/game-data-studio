@@ -9,8 +9,9 @@ import { CombatSimPanel } from "./panels/CombatSimPanel";
 import { GachaSimPanel } from "./panels/GachaSimPanel";
 import { DpsSimPanel } from "./panels/DpsSimPanel";
 import { DifficultySimPanel } from "./panels/DifficultySimPanel";
+import { PacingSimPanel } from "./panels/PacingSimPanel";
 
-type Mode = "saved" | "stat" | "combat" | "gacha" | "dps" | "difficulty";
+type Mode = "saved" | "stat" | "combat" | "gacha" | "dps" | "difficulty" | "pacing";
 
 export function SimulationView({ projectId }: { projectId: string }) {
   const [mode, setMode] = useState<Mode>("saved");
@@ -69,9 +70,9 @@ export function SimulationView({ projectId }: { projectId: string }) {
 
       {/* 메인 */}
       <div className="flex flex-col flex-1 overflow-hidden">
-        <ContentHeader title={mode === "stat" ? "스탯 계산기" : mode === "combat" ? "전투 시뮬레이션" : mode === "gacha" ? "가챠 시뮬레이션" : mode === "dps" ? "DPS 빌드 비교" : mode === "difficulty" ? "난이도 곡선" : (selectedSim?.name ?? "새 시뮬레이션")}>
+        <ContentHeader title={mode === "stat" ? "스탯 계산기" : mode === "combat" ? "전투 시뮬레이션" : mode === "gacha" ? "가챠 시뮬레이션" : mode === "dps" ? "DPS 빌드 비교" : mode === "difficulty" ? "난이도 곡선" : mode === "pacing" ? "진척도 페이싱" : (selectedSim?.name ?? "새 시뮬레이션")}>
           <PillTab
-            tabs={[{ id: "saved", label: "저장된 시뮬" }, { id: "stat", label: "스탯 계산기" }, { id: "combat", label: "전투 시뮬" }, { id: "gacha", label: "가챠" }, { id: "dps", label: "DPS" }, { id: "difficulty", label: "난이도" }]}
+            tabs={[{ id: "saved", label: "저장된 시뮬" }, { id: "stat", label: "스탯 계산기" }, { id: "combat", label: "전투 시뮬" }, { id: "gacha", label: "가챠" }, { id: "dps", label: "DPS" }, { id: "difficulty", label: "난이도" }, { id: "pacing", label: "페이싱" }]}
             active={mode}
             onChange={(m) => setMode(m as Mode)}
           />
@@ -100,6 +101,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
           {mode === "gacha" && <GachaSimPanel tables={tables} />}
           {mode === "dps" && <DpsSimPanel />}
           {mode === "difficulty" && <DifficultySimPanel tables={tables} />}
+          {mode === "pacing" && <PacingSimPanel tables={tables} />}
         </div>
       </div>
     </div>

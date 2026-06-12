@@ -7,6 +7,7 @@ import { runMonteCarlo } from "@/lib/simulation/combat";
 import { runGachaSimulation } from "@/lib/simulation/gacha";
 import { runDpsSimulation, type BuildSpec } from "@/lib/simulation/dps";
 import { difficultyCurve, type StageInput } from "@/lib/simulation/difficulty";
+import { simulatePacing } from "@/lib/simulation/pacing";
 import { winRateMatrix } from "@/lib/balance/correlate";
 import { type Unit } from "@/lib/simulation/combat";
 import { fitCurve } from "@/lib/curve/fit";
@@ -164,6 +165,24 @@ export async function POST(req: NextRequest) {
     const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
     const maxUnits = Number.isFinite(Number(body.maxUnits)) ? Math.floor(Number(body.maxUnits)) : undefined;
     return NextResponse.json(winRateMatrix(units, iterations, seed, maxUnits));
+  }
+  if (body.action === "pacing") {
+    // PacingInput 필드 파싱 — 없으면 400
+    const { hpCurve, atkCurve, expCurve, upgradeCostCurve, stages, expPerStage, goldPerStage, days, attemptsPerDay } = body;
+    if (!hpCurve || !atkCurve || !expCurve || !upgradeCostCurve || !Array.isArray(stages) || stages.length === 0) {
+      return NextResponse.json({ error: "pacing: hpCurve/atkCurve/expCurve/upgradeCostCurve/stages required" }, { status: 400 });
+    }
+    const seed = Number.isFinite(Number(body.seed)) ? Math.floor(Number(body.seed)) : 0;
+    return NextResponse.json(simulatePacing({
+      hpCurve, atkCurve, defCurve: body.defCurve,
+      expCurve, upgradeCostCurve,
+      stages,
+      expPerStage: Number(expPerStage) || 50,
+      goldPerStage: Number(goldPerStage) || 100,
+      days: Math.min(365, Math.max(1, Math.floor(Number(days) || 30))),
+      attemptsPerDay: Math.min(100, Math.max(1, Math.floor(Number(attemptsPerDay) || 10))),
+      seed,
+    }));
   }
   if (body.action) {
     return NextResponse.json({ error: `unknown action: ${body.action}` }, { status: 400 });
