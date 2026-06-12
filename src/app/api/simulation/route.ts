@@ -165,6 +165,9 @@ export async function POST(req: NextRequest) {
     const maxUnits = Number.isFinite(Number(body.maxUnits)) ? Math.floor(Number(body.maxUnits)) : undefined;
     return NextResponse.json(winRateMatrix(units, iterations, seed, maxUnits));
   }
+  if (body.action) {
+    return NextResponse.json({ error: `unknown action: ${body.action}` }, { status: 400 });
+  }
   return NextResponse.json(saveSimulation(body), { status: 201 });
 }
 
