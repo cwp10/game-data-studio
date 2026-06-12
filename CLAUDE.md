@@ -50,9 +50,9 @@ claude mcp add --transport stdio game-data-studio -- node --import tsx ./src/lib
 
 ## 하네스: Game Data Studio
 
-**목표:** 기능 구현 요청을 schema-designer / mcp-implementer / ui-builder / balance-engineer / qa-validator 에이전트 팀으로 자동화한다.
+**목표:** 기능 구현 요청을 schema-designer / mcp-implementer / ui-builder / balance-engineer / qa-validator / help-builder 에이전트 팀으로 자동화한다.
 
-**트리거:** 기능 구현, MCP 툴 추가, UI 화면 개발, 밸런싱/시뮬레이션 로직 등 개발 작업 요청 시 `game-data-feature` 스킬을 사용하라. 단순 질문이나 코드 설명은 직접 응답 가능.
+**트리거:** 기능 구현, MCP 툴 추가, UI 화면 개발, 밸런싱/시뮬레이션 로직, **도움말 팝업** 등 개발 작업 요청 시 `game-data-feature` 스킬을 사용하라. 단순 질문이나 코드 설명은 직접 응답 가능.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
@@ -63,3 +63,4 @@ claude mcp add --transport stdio game-data-studio -- node --import tsx ./src/lib
 | 2026-06-10 | simulation 요청 유형 추가 (Stage A 코어→Stage B fullstack 2단계 파이프라인), schema 호출 model 명시 | game-data-feature/SKILL.md | Phase 2 반복 패턴 오케스트레이터 반영 |
 | 2026-06-10 | balance-algo 재작성: Wilson CI·mulberry32 RNG·가챠 소프트 천장·DPS MC 핵심화, C# references/로 격하 | balance-algo/SKILL.md | 네이티브 TS 엔진이 실제 구현 경로, C#은 보조 |
 | 2026-06-10 | game-schema 6종 장르를 references/genres/ 분리 (639줄→74줄), gds-ui SimulationView 유형 탭·Histogram·LineChart 패턴 추가, description "5개→8개 화면" 수정 | game-schema/, gds-ui/SKILL.md | 500줄 상한 준수, Phase 2 UI 패턴 반영 |
+| 2026-06-13 | help-builder 에이전트 추가 + help-content 스킬 신규 생성, game-data-feature에 help 요청 유형 추가 | agents/help-builder.md, skills/help-content/, game-data-feature/SKILL.md | 도움말 팝업 HelpModal 전담 에이전트 구성 |
