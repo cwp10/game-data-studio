@@ -530,26 +530,43 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.name));
 
   // CSV 내보내기
+  const saveBlob = async (blob: Blob, fileName: string, mimeType: string, ext: string) => {
+    if ("showSaveFilePicker" in window) {
+      try {
+        const handle = await (window as Window & { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: fileName, accept: { [mimeType]: [ext] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+  };
+
   const csvExport = async () => {
     if (!selectedId) return;
     const res = await fetch("/api/csv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "export", table_id: selectedId }) });
     const blob = await res.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
-    a.click();
+    const fileName = (tables.find((t) => t.id === selectedId)?.name ?? "export") + ".csv";
+    await saveBlob(blob, fileName, "text/csv", ".csv");
   };
 
   // JSON 내보내기
-  const exportJson = () => {
+  const exportJson = async () => {
     if (!selectedId) return;
     const t = tables.find((t) => t.id === selectedId);
     const data = JSON.stringify(rows.map((r) => r.data), null, 2);
     const blob = new Blob([data], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (t?.name ?? "export") + ".json";
-    a.click();
+    const fileName = (t?.name ?? "export") + ".json";
+    await saveBlob(blob, fileName, "application/json", ".json");
   };
 
   // 스냅샷 저장
