@@ -27,6 +27,81 @@ interface CombatResult {
 }
 
 type Mode = "saved" | "stat" | "combat" | "gacha" | "dps" | "difficulty";
+type EngineMode = "plain" | "unity" | "unreal" | "godot" | "js" | "python";
+
+interface FormulaItem {
+  xCol: string;
+  yCol: string;
+  type: "linear" | "power" | "exponential" | "logarithmic" | "quadratic";
+  base: number;
+  factor: number;
+  r2: number;
+}
+
+const ENGINE_LABELS: Record<EngineMode, string> = {
+  plain: "수식", unity: "Unity C#", unreal: "Unreal C++", godot: "Godot", js: "JavaScript", python: "Python",
+};
+
+function generateEngineCode(items: FormulaItem[], engine: EngineMode): string {
+  if (engine === "plain" || items.length === 0) return "";
+  const f4 = (n: number) => parseFloat(n.toPrecision(8)).toString();
+
+  return items.map(({ xCol, yCol, type, base, factor }) => {
+    const fnName = yCol.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    const X = xCol;
+
+    // 각 타입별 수식 표현
+    let expr = { unity: "", unreal: "", godot: "", js: "", python: "" };
+    if (type === "linear") {
+      expr = {
+        unity:  `${f4(base)}f + ${f4(factor)}f * (${X} - 1)`,
+        unreal: `${f4(base)}f + ${f4(factor)}f * (${X} - 1)`,
+        godot:  `${f4(base)} + ${f4(factor)} * (${X} - 1)`,
+        js:     `${f4(base)} + ${f4(factor)} * (${X} - 1)`,
+        python: `${f4(base)} + ${f4(factor)} * (${X} - 1)`,
+      };
+    } else if (type === "power") {
+      expr = {
+        unity:  `${f4(base)}f * Mathf.Pow(${X}, ${f4(factor)}f)`,
+        unreal: `${f4(base)}f * FMath::Pow((float)${X}, ${f4(factor)}f)`,
+        godot:  `${f4(base)} * pow(${X}, ${f4(factor)})`,
+        js:     `${f4(base)} * Math.pow(${X}, ${f4(factor)})`,
+        python: `${f4(base)} * (${X} ** ${f4(factor)})`,
+      };
+    } else if (type === "exponential") {
+      expr = {
+        unity:  `${f4(base)}f * Mathf.Pow(${f4(factor)}f, ${X} - 1)`,
+        unreal: `${f4(base)}f * FMath::Pow(${f4(factor)}f, ${X} - 1)`,
+        godot:  `${f4(base)} * pow(${f4(factor)}, ${X} - 1)`,
+        js:     `${f4(base)} * Math.pow(${f4(factor)}, ${X} - 1)`,
+        python: `${f4(base)} * (${f4(factor)} ** (${X} - 1))`,
+      };
+    } else if (type === "logarithmic") {
+      expr = {
+        unity:  `${f4(base)}f + ${f4(factor)}f * Mathf.Log(${X})`,
+        unreal: `${f4(base)}f + ${f4(factor)}f * FMath::Loge(${X})`,
+        godot:  `${f4(base)} + ${f4(factor)} * log(${X})`,
+        js:     `${f4(base)} + ${f4(factor)} * Math.log(${X})`,
+        python: `${f4(base)} + ${f4(factor)} * math.log(${X})`,
+      };
+    } else { // quadratic
+      expr = {
+        unity:  `${f4(base)}f + ${f4(factor)}f * Mathf.Pow(${X} - 1, 2)`,
+        unreal: `${f4(base)}f + ${f4(factor)}f * FMath::Pow(${X} - 1, 2)`,
+        godot:  `${f4(base)} + ${f4(factor)} * pow(${X} - 1, 2)`,
+        js:     `${f4(base)} + ${f4(factor)} * Math.pow(${X} - 1, 2)`,
+        python: `${f4(base)} + ${f4(factor)} * ((${X} - 1) ** 2)`,
+      };
+    }
+
+    if (engine === "unity") return `float Get${fnName.charAt(0).toUpperCase() + fnName.slice(1)}(int ${X}) {\n    return ${expr.unity};\n}`;
+    if (engine === "unreal") return `float Get${fnName.charAt(0).toUpperCase() + fnName.slice(1)}(int32 ${X}) {\n    return ${expr.unreal};\n}`;
+    if (engine === "godot") return `func get_${yCol}(${X}: int) -> float:\n    return ${expr.godot}`;
+    if (engine === "js") return `function get${fnName.charAt(0).toUpperCase() + fnName.slice(1)}(${X}) {\n    return ${expr.js};\n}`;
+    if (engine === "python") return `def get_${yCol}(${X}: int) -> float:\n    return ${expr.python}`;
+    return "";
+  }).join("\n\n");
+}
 
 // ── 난이도 계약 (51_difficulty_contract.md) ────────────────────────
 interface StageInput { label: string; enemy: Unit; }
@@ -84,6 +159,8 @@ export function SimulationView({ projectId }: { projectId: string }) {
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(null);
   const [formula, setFormula] = useState("");
+  const [formulaData, setFormulaData] = useState<FormulaItem[]>([]);
+  const [engineMode, setEngineMode] = useState<EngineMode>("plain");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -133,7 +210,9 @@ export function SimulationView({ projectId }: { projectId: string }) {
     });
     const d = await res.json();
     setSnapshot(d.snapshot);
-    setFormula("// 데이터 스냅샷이 로드되었습니다.\n// Claude에게 이 시뮬레이션 결과를 바탕으로 Unity C# 수식을 도출해달라고 요청하세요.\n// MCP 툴: run_simulation → save_simulation");
+    setFormula(d.formula ?? "수식을 도출하지 못했습니다. 컬럼을 2개 이상 선택해주세요.");
+    setFormulaData(Array.isArray(d.formulaData) ? d.formulaData : []);
+    setEngineMode("plain");
     setLoading(false);
   };
 
@@ -146,6 +225,13 @@ export function SimulationView({ projectId }: { projectId: string }) {
       body: JSON.stringify({ project_id: projectId, name, input_tables: selectedTables, formula_cs: formula }),
     }).then((r) => r.json());
     setSimulations((prev) => [s, ...prev]);
+  };
+
+  const deleteSim = async (id: string) => {
+    if (!confirm("이 시뮬레이션을 삭제하시겠습니까?")) return;
+    await fetch(`/api/simulation?id=${id}`, { method: "DELETE" });
+    setSimulations((prev) => prev.filter((s) => s.id !== id));
+    if (selectedSimId === id) setSelectedSimId(null);
   };
 
   const selectedSim = simulations.find((s) => s.id === selectedSimId);
@@ -177,10 +263,18 @@ export function SimulationView({ projectId }: { projectId: string }) {
             <div
               key={s.id}
               onClick={() => { setMode("saved"); setSelectedSimId(s.id); }}
-              className={`px-3 py-2.5 cursor-pointer border-l-2 ${mode === "saved" && selectedSimId === s.id ? "bg-[#1e1e24] border-[#8b5cf6]" : "border-transparent hover:bg-[#1e1e24]"}`}
+              className={`group px-3 py-2.5 cursor-pointer border-l-2 flex items-start justify-between gap-1 ${mode === "saved" && selectedSimId === s.id ? "bg-[#1e1e24] border-[#8b5cf6]" : "border-transparent hover:bg-[#1e1e24]"}`}
             >
-              <div className="text-xs font-medium text-[#ededed]">{s.name}</div>
-              {s.description && <div className="text-[11px] text-[#6b6b77] mt-0.5">{s.description}</div>}
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-[#ededed] truncate">{s.name}</div>
+                {s.description && <div className="text-[11px] text-[#6b6b77] mt-0.5 truncate">{s.description}</div>}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteSim(s.id); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-[#6b6b77] hover:text-[#f87171] mt-0.5"
+              >
+                <Trash2 size={11} />
+              </button>
             </div>
           ))}
           <div className="px-3 py-2.5 text-xs text-[#4a4a55] cursor-pointer hover:bg-[#1e1e24]" onClick={() => { setMode("saved"); setSelectedSimId(null); }}>
@@ -200,7 +294,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
           {mode === "saved" && (
             <>
               <Tooltip label="재실행"><Btn onClick={() => setSelectedSimId(null)}><RotateCcw size={11} /></Btn></Tooltip>
-              <Tooltip label="C# 코드 복사"><Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}><Copy size={11} /></Btn></Tooltip>
+              <Tooltip label="수식 복사"><Btn variant="success" onClick={() => formula && navigator.clipboard.writeText(formula)}><Copy size={11} /></Btn></Tooltip>
             </>
           )}
         </ContentHeader>
@@ -255,11 +349,44 @@ export function SimulationView({ projectId }: { projectId: string }) {
 
               <SectionLabel>도출된 수식</SectionLabel>
               <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl overflow-hidden mb-4">
-                <div className="px-4 py-3 border-b border-[#2a2a2f] flex items-center justify-between">
-                  <span className="text-[12px] font-semibold text-[#ededed]">Unity C#</span>
-                  {selectedSim?.formula_cs && <span className="text-[10px] text-[#4ade80] font-medium">✓ 저장됨</span>}
+                {/* 헤더: 엔진 선택 버튼 그룹 + 저장됨 배지 + 복사 버튼 */}
+                <div className="px-4 py-2.5 border-b border-[#2a2a2f] flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {(Object.keys(ENGINE_LABELS) as EngineMode[]).map((eng) => (
+                      <button
+                        key={eng}
+                        onClick={() => setEngineMode(eng)}
+                        className={`text-[10px] px-2 py-1 rounded border cursor-pointer transition-colors ${engineMode === eng ? "bg-[#1e1b4b] border-[#7c3aed] text-[#c4b5fd]" : "bg-transparent border-[#2a2a2f] text-[#6b6b77] hover:border-[#4a4a55] hover:text-[#9a9aa3]"}`}
+                      >
+                        {ENGINE_LABELS[eng]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedSim?.formula_cs && <span className="text-[10px] text-[#4ade80] font-medium">✓ 저장됨</span>}
+                    <button
+                      onClick={() => {
+                        const code = engineMode === "plain"
+                          ? (selectedSim?.formula_cs ?? formula)
+                          : generateEngineCode(formulaData, engineMode);
+                        if (code) navigator.clipboard.writeText(code);
+                      }}
+                      className="text-[10px] px-2 py-1 rounded border border-[#2a2a2f] text-[#6b6b77] hover:text-[#ededed] hover:border-[#4a4a55] transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Copy size={10} />복사
+                    </button>
+                  </div>
                 </div>
-                <CsCodeBlock code={selectedSim?.formula_cs ?? formula ?? "// 시뮬레이션을 실행하면 Unity C# 수식이 여기에 표시됩니다."} />
+                {/* 수식 내용 */}
+                {engineMode === "plain" ? (
+                  <pre className="px-4 py-3 text-[12px] text-[#c4b5fd] whitespace-pre-wrap leading-relaxed font-mono">{selectedSim?.formula_cs ?? formula ?? "시뮬레이션을 실행하면 수식이 여기에 표시됩니다."}</pre>
+                ) : (
+                  <pre className="px-4 py-3 text-[12px] text-[#86efac] whitespace-pre-wrap leading-relaxed font-mono">
+                    {formulaData.length > 0
+                      ? generateEngineCode(formulaData, engineMode)
+                      : "수식 도출 후 엔진 코드를 확인할 수 있습니다."}
+                  </pre>
+                )}
                 {sampleCases.length > 0 && (
                   <div className="border-t border-[#2a2a2f] px-4 py-3">
                     <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-wide mb-2">테스트 케이스 — 샘플 입력</div>
@@ -275,12 +402,6 @@ export function SimulationView({ projectId }: { projectId: string }) {
                 )}
               </div>
 
-              {snapshot && (
-                <div className="bg-[#1c1200] border border-[#f59e0b]/20 rounded-xl px-4 py-3 text-[11px] text-[#f59e0b] flex items-start gap-2 leading-relaxed">
-                  <span className="flex-shrink-0">⚠</span>
-                  <span>데이터 스냅샷이 로드되었습니다. Claude Code에서 MCP <code className="bg-[#0f0f10] px-1 rounded">run_simulation</code> 툴로 C# 수식을 도출하고 <code className="bg-[#0f0f10] px-1 rounded">save_simulation</code>으로 저장하세요.</span>
-                </div>
-              )}
 
               {snapshot && (
                 <div className="mt-3 flex gap-2">

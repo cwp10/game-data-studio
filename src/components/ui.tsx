@@ -111,9 +111,9 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#16161a] border border-[#2a2a2f] rounded-2xl shadow-2xl p-5 w-[420px] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
-        <div className="text-sm font-semibold mb-4 text-[#ededed]">{title}</div>
-        {children}
+      <div className="bg-[#16161a] border border-[#2a2a2f] rounded-2xl shadow-2xl w-[420px] max-w-[90vw] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="text-sm font-semibold px-5 pt-5 pb-4 text-[#ededed] flex-shrink-0">{title}</div>
+        <div className="overflow-y-auto px-5 pb-5 flex-1">{children}</div>
       </div>
     </div>
   );

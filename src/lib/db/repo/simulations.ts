@@ -23,6 +23,10 @@ export function getSimulation(id: string): Simulation | undefined {
   return getDb().prepare("SELECT * FROM simulations WHERE id = ?").get(id) as Simulation | undefined;
 }
 
+export function deleteSimulation(id: string): void {
+  getDb().prepare("DELETE FROM simulations WHERE id = ?").run(id);
+}
+
 export function saveSimulation(data: {
   project_id: string;
   name: string;
