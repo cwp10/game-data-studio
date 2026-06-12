@@ -9,10 +9,58 @@
     "start": "next start -p 3001",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3001 && electron .\"",
+    "electron:build": "next build && node scripts/prepare-electron-build.js && electron-builder --mac",
     "init-db": "node --import tsx ./scripts/init-db.ts",
     "seed-demo": "node --import tsx ./scripts/seed-demo.ts",
     "mcp": "node --import tsx ./src/lib/mcp/server.ts",
     "test": "vitest run"
+  },
+  "build": {
+    "appId": "com.mancheolsoft.game-data-studio",
+    "productName": "Game Data Studio",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": ".next/standalone",
+        "filter": ["**/*"]
+      },
+      {
+        "from": ".next/static",
+        "to": ".next/standalone/.next/static",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "public",
+        "to": ".next/standalone/public",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "data",
+        "to": "data",
+        "filter": ["**/*", "!*.db", "!*.db-shm", "!*.db-wal"]
+      }
+    ],
+    "mac": {
+      "icon": "icon-assets/AppIcon.icns",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] }
+      ]
+    },
+    "dmg": {
+      "title": "Game Data Studio",
+      "background": null,
+      "window": { "width": 540, "height": 380 }
+    }
   },
   "keywords": [],
   "author": "",

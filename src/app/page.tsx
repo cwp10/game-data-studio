@@ -25,12 +25,12 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-[#0f0f10]">
-      {/* macOS titlebar */}
-      <div className="h-9 bg-[#0f0f10] border-b border-[#2a2a2f] flex items-center px-3 gap-1.5 flex-shrink-0">
-        <div className="w-2.5 h-2.5 rounded-full bg-[#E24B4A]" />
-        <div className="w-2.5 h-2.5 rounded-full bg-[#EF9F27]" />
-        <div className="w-2.5 h-2.5 rounded-full bg-[#639922]" />
-        <span className="text-xs text-[#4a4a55] ml-2">
+      {/* macOS titlebar drag region — 신호등 버튼은 Electron hiddenInset이 그림 */}
+      <div
+        className="h-9 bg-[#0f0f10] border-b border-[#2a2a2f] flex items-center flex-shrink-0"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+      >
+        <span className="text-xs text-[#4a4a55] ml-[80px]">
           Game Data Studio{projectId && projectName ? ` — ${projectName}` : ""}
         </span>
       </div>

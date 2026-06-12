@@ -1,28 +1,30 @@
 const { app, BrowserWindow, shell } = require("electron");
-const path = require("path");
-const { spawn } = require("child_process");
-const http = require("http");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const http = require("node:http");
 
-const isDev = !app.isPackaged;
-const NEXT_PORT = 3001;
+const PROJECT_DIR = path.resolve(__dirname, "..");
+const PORT = 3001;
+const URL = `http://127.0.0.1:${PORT}`;
 
 let mainWindow = null;
-let nextProcess = null;
+let serverProc = null;
 
-function waitForNext(url, retries = 30) {
-  return new Promise((resolve, reject) => {
-    const attempt = (n) => {
-      http.get(url, (res) => {
-        if (res.statusCode < 500) resolve();
-        else if (n > 0) setTimeout(() => attempt(n - 1), 500);
-        else reject(new Error("Next.js did not start in time"));
-      }).on("error", () => {
-        if (n > 0) setTimeout(() => attempt(n - 1), 500);
-        else reject(new Error("Next.js not reachable"));
-      });
-    };
-    attempt(retries);
+function isUp() {
+  return new Promise((resolve) => {
+    const req = http.get(URL, (res) => { res.destroy(); resolve(true); });
+    req.on("error", () => resolve(false));
+    req.setTimeout(800, () => { req.destroy(); resolve(false); });
   });
+}
+
+async function waitForServer(timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isUp()) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
 }
 
 function createWindow() {
@@ -37,10 +39,7 @@ function createWindow() {
       contextIsolation: true,
     },
   });
-
-  // 개발/운영 모두 로컬 Next.js 서버를 로드한다.
-  // 이 앱은 API 라우트(SQLite·MCP·claude)가 필요해 정적 export 로는 동작하지 않는다.
-  mainWindow.loadURL(`http://localhost:${NEXT_PORT}`);
+  mainWindow.loadURL(URL);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -48,21 +47,31 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // dev: next dev / 운영: next start (둘 다 npm, 정적 export 아님)
-  const appRoot = path.join(__dirname, "..");
-  nextProcess = spawn("npm", ["run", isDev ? "dev" : "start"], {
-    cwd: appRoot,
+  // 서버가 이미 떠 있으면(dev 모드) 그냥 사용
+  if (await isUp()) {
+    createWindow();
+    return;
+  }
+
+  // next build가 있으면 next start, 없으면 next dev
+  const { existsSync } = require("node:fs");
+  const hasBuild = existsSync(path.join(PROJECT_DIR, ".next", "BUILD_ID"));
+  const script = hasBuild ? "start" : "dev";
+
+  serverProc = spawn("npm", ["run", script], {
+    cwd: PROJECT_DIR,
     shell: true,
     stdio: "inherit",
-    // spawn된 서버가 claude 를 찾을 수 있도록 PATH 보강
-    env: { ...process.env, PATH: `${process.env.PATH || ""}:${path.join(require("os").homedir(), ".local/bin")}:/opt/homebrew/bin:/usr/local/bin` },
+    env: { ...process.env, PORT: String(PORT) },
   });
-  await waitForNext(`http://localhost:${NEXT_PORT}`);
+
+  const ok = await waitForServer();
+  if (!ok) { app.quit(); return; }
   createWindow();
 });
 
 app.on("window-all-closed", () => {
-  if (nextProcess) nextProcess.kill();
+  if (serverProc) serverProc.kill();
   if (process.platform !== "darwin") app.quit();
 });
 
