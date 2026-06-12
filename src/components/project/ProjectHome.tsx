@@ -19,9 +19,30 @@ interface Project {
 export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, projectId?: string, projectName?: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showWizard, setShowWizard] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const load = () => fetch("/api/projects").then((r) => r.json()).then(setProjects);
   useEffect(() => { load(); }, []);
+
+  const startEdit = (e: React.MouseEvent, p: Project) => {
+    e.stopPropagation();
+    setEditingId(p.id);
+    setEditingName(p.name);
+  };
+
+  const commitEdit = async (id: string) => {
+    const trimmed = editingName.trim();
+    if (trimmed && trimmed !== projects.find((p) => p.id === id)?.name) {
+      await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      load();
+    }
+    setEditingId(null);
+  };
 
   const del = async (id: string) => {
     if (!confirm("프로젝트와 모든 하위 데이터를 삭제합니다. 계속하시겠습니까?")) return;
@@ -74,11 +95,26 @@ export function ProjectHome({ onNavigate }: { onNavigate: (screen: Screen, proje
                       : <div />
                     }
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#ededed] hover:bg-[#2a2a2f]" onClick={(e) => { e.stopPropagation(); onNavigate("schema", p.id, p.name); }}>편집</button>
+                      <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#ededed] hover:bg-[#2a2a2f]" onClick={(e) => startEdit(e, p)}>편집</button>
                       <button className="text-[11px] px-1.5 py-0.5 rounded text-[#6b6b77] hover:text-[#f87171] hover:bg-[#2a2a2f]" onClick={(e) => { e.stopPropagation(); del(p.id); }}>삭제</button>
                     </div>
                   </div>
-                  <div className="text-[13px] font-semibold mb-1 text-[#ededed]">{p.name}</div>
+                  {editingId === p.id ? (
+                    <input
+                      autoFocus
+                      value={editingName}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit(p.id);
+                        else if (e.key === "Escape") setEditingId(null);
+                      }}
+                      onBlur={() => commitEdit(p.id)}
+                      className="text-[13px] font-semibold text-[#ededed] bg-[#0f0f10] border border-[#7c3aed] rounded px-1 py-0 w-full outline-none mb-1"
+                    />
+                  ) : (
+                    <div className="text-[13px] font-semibold mb-1 text-[#ededed]" onDoubleClick={(e) => startEdit(e, p)}>{p.name}</div>
+                  )}
                   {p.description && <div className="text-[11px] text-[#6b6b77] mb-3 leading-relaxed">{p.description}</div>}
                   <div className="flex items-center gap-3 pt-3 border-t border-[#2a2a2f]">
                     <div className="text-[11px] text-[#4a4a55]">테이블 <span className="text-[#9a9aa3] font-medium">{p.table_count}</span></div>

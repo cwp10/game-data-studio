@@ -25,6 +25,8 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
   const [toColumns, setToColumns] = useState<Column[]>([]);
   const [bottomTab, setBottomTab] = useState<"chat" | "relations">("chat");
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingName, setRenamingName] = useState("");
   useEffect(() => { if (localStorage.getItem("schema:bottomCollapsed") === "1") setBottomCollapsed(true); }, []);
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
@@ -43,6 +45,25 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
     setShowTableModal(false);
     setTableForm({ name: "", description: "" });
     loadTables();
+  };
+
+  const startRename = (e: React.MouseEvent, t: Table) => {
+    e.stopPropagation();
+    setRenamingId(t.id);
+    setRenamingName(t.name);
+  };
+
+  const commitRename = async (id: string) => {
+    const trimmed = renamingName.trim();
+    if (trimmed && trimmed !== tables.find((t) => t.id === id)?.name) {
+      await fetch(`/api/tables/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      loadTables();
+    }
+    setRenamingId(null);
   };
 
   const delTable = async (id: string) => {
@@ -130,9 +151,33 @@ export function SchemaEditor({ projectId }: { projectId: string }) {
         </PanelHeader>
         <div className="overflow-auto flex-1">
           {tables.map((t) => (
-            <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)}>
-              <span className="flex-1 truncate">{t.name}</span>
-              <span className="ml-auto text-[10px] text-[#3a3a42]">{selectedId === t.id ? columns.length || "" : ""}</span>
+            <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)} className="group">
+              {renamingId === t.id ? (
+                <input
+                  autoFocus
+                  value={renamingName}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setRenamingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename(t.id);
+                    else if (e.key === "Escape") setRenamingId(null);
+                  }}
+                  onBlur={() => commitRename(t.id)}
+                  className="flex-1 text-[11px] text-[#ededed] bg-[#0f0f10] border border-[#7c3aed]/60 rounded px-1 py-0 w-full outline-none"
+                />
+              ) : (
+                <>
+                  <span className="flex-1 truncate">{t.name}</span>
+                  <button
+                    onClick={(e) => startRename(e, t)}
+                    title="이름 변경"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[#6b6b77] hover:text-[#ededed] flex-shrink-0"
+                  >
+                    <Pencil size={10} />
+                  </button>
+                  <span className="text-[10px] text-[#3a3a42]">{selectedId === t.id ? columns.length || "" : ""}</span>
+                </>
+              )}
             </PanelItem>
           ))}
         </div>

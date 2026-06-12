@@ -42,3 +42,16 @@ export function createTable(data: { project_id: string; name: string; descriptio
 export function deleteTable(id: string): void {
   getDb().prepare("DELETE FROM tables WHERE id = ?").run(id);
 }
+
+export function updateTable(id: string, data: { name?: string; description?: string }): Table {
+  const db = getDb();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (data.name !== undefined) { sets.push("name = ?"); vals.push(data.name); }
+  if (data.description !== undefined) { sets.push("description = ?"); vals.push(data.description); }
+  if (!sets.length) return getTable(id)!;
+  sets.push("updated_at = ?"); vals.push(Date.now());
+  vals.push(id);
+  db.prepare(`UPDATE tables SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+  return getTable(id)!;
+}
