@@ -1,13 +1,15 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2, StickyNote, GitCompare } from "lucide-react";
-import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Modal, Input, Select, Tooltip } from "@/components/ui";
+import { Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2, StickyNote, GitCompare, Plus } from "lucide-react";
+import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
-import { computeCurve, type CurveType } from "@/lib/curve/generate";
+import { computeCurve } from "@/lib/curve/generate";
 import { solveCurve } from "@/lib/curve/solve";
 import { fitCurve } from "@/lib/curve/fit";
-import { type DiffResult } from "@/lib/snapshot/diff";
+import { CurveModal, type CurveState } from "@/components/editor/CurveModal";
+import { AnnotationModal } from "@/components/editor/AnnotationModal";
+import { SnapshotDiffModal, type DiffResultData } from "@/components/editor/SnapshotDiffModal";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
@@ -46,11 +48,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [showDiff, setShowDiff] = useState(false);
   const [diffA, setDiffA] = useState("");
   const [diffB, setDiffB] = useState("");
-  const [diffResult, setDiffResult] = useState<{
-    snapshotA: { id: string; name: string; created_at: number };
-    snapshotB: { id: string; name: string; created_at: number };
-    diff: DiffResult;
-  } | null>(null);
+  const [diffResult, setDiffResult] = useState<DiffResultData | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [bottomTab, setBottomTab] = useState<"chat" | "balance" | "chart">("chat");
@@ -60,7 +58,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [chartX, setChartX] = useState("");
   const [chartY, setChartY] = useState<string[]>([]);
   const [showCurve, setShowCurve] = useState(false);
-  const [curve, setCurve] = useState({ value_column: "", level_column: "level", type: "power" as CurveType, base: "100", factor: "1.5", count: "30", replace: true, range: "100", rate: "0.3", midpoint: "15" });
+  const [curve, setCurve] = useState<CurveState>({ value_column: "", level_column: "level", type: "power", base: "100", factor: "1.5", count: "30", replace: true, range: "100", rate: "0.3", midpoint: "15" });
   const [solveTargetLevel, setSolveTargetLevel] = useState("");
   const [solveTargetValue, setSolveTargetValue] = useState("");
   const [solveResult, setSolveResult] = useState<{ ok: boolean; achievedValue?: number } | null>(null);
@@ -979,270 +977,52 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         </div>
       </div>
 
-      {/* 성장 곡선 생성 모달 */}
-      <Modal open={showCurve} onClose={() => setShowCurve(false)} title="성장 곡선 생성">
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-[11px] text-[#9a9aa3] mb-1">레벨 컬럼</div>
-              <Input value={curve.level_column} onChange={(e) => setCurve({ ...curve, level_column: e.target.value })} />
-            </div>
-            <div>
-              <div className="text-[11px] text-[#9a9aa3] mb-1">값 컬럼 *</div>
-              <Input placeholder="예: exp" value={curve.value_column} onChange={(e) => setCurve({ ...curve, value_column: e.target.value })} />
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-[#9a9aa3] mb-1">곡선 타입</div>
-            <Select value={curve.type} onChange={(e) => setCurve({ ...curve, type: e.target.value as CurveType })}>
-              <option value="linear">선형 — base + factor×(L-1)</option>
-              <option value="power">거듭제곱 — base × L^factor</option>
-              <option value="exponential">지수 — base × factor^(L-1)</option>
-              <option value="logarithmic">로그 — base + factor×ln(L)</option>
-              <option value="quadratic">2차 — base + factor×(L-1)²</option>
-              <option value="s_curve">S-Curve — base + range/(1+exp(-rate×(L-mid)))</option>
-            </Select>
-          </div>
-          {curve.type === "s_curve" ? (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="text-[11px] text-[#9a9aa3] mb-1">base (하한)</div>
-                  <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
-                </div>
-                <div>
-                  <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
-                  <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <div className="text-[11px] text-[#9a9aa3] mb-1">range (증가폭)</div>
-                  <Input value={curve.range} onChange={(e) => setCurve({ ...curve, range: e.target.value })} />
-                </div>
-                <div>
-                  <div className="text-[11px] text-[#9a9aa3] mb-1">rate (가파름)</div>
-                  <Input value={curve.rate} onChange={(e) => setCurve({ ...curve, rate: e.target.value })} />
-                </div>
-                <div>
-                  <div className="text-[11px] text-[#9a9aa3] mb-1">midpoint (변곡 레벨)</div>
-                  <Input value={curve.midpoint} onChange={(e) => setCurve({ ...curve, midpoint: e.target.value })} />
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <div className="text-[11px] text-[#9a9aa3] mb-1">base</div>
-                <Input value={curve.base} onChange={(e) => setCurve({ ...curve, base: e.target.value })} />
-              </div>
-              <div>
-                <div className="text-[11px] text-[#9a9aa3] mb-1">factor</div>
-                <Input value={curve.factor} onChange={(e) => setCurve({ ...curve, factor: e.target.value })} />
-              </div>
-              <div>
-                <div className="text-[11px] text-[#9a9aa3] mb-1">개수(레벨)</div>
-                <Input value={curve.count} onChange={(e) => setCurve({ ...curve, count: e.target.value })} />
-              </div>
-            </div>
-          )}
+      <CurveModal
+        open={showCurve}
+        onClose={() => setShowCurve(false)}
+        curve={curve}
+        setCurve={setCurve}
+        curvePreview={curvePreview}
+        solveTargetLevel={solveTargetLevel}
+        setSolveTargetLevel={setSolveTargetLevel}
+        solveTargetValue={solveTargetValue}
+        setSolveTargetValue={setSolveTargetValue}
+        solveResult={solveResult}
+        setSolveResult={setSolveResult}
+        runSolve={runSolve}
+        fitPoints={fitPoints}
+        setFitPoints={setFitPoints}
+        fitResult={fitResult}
+        setFitResult={setFitResult}
+        runFit={runFit}
+        runCurve={runCurve}
+      />
 
-          {/* 목표값으로 역산 */}
-          {curve.type === "s_curve" ? (
-            <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3">
-              <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">목표값으로 역산</div>
-              <div className="text-[10px] text-[#6b6b77] mt-1">S-Curve는 단일 factor가 없어 역산이 지원되지 않습니다.</div>
-            </div>
-          ) : (
-          <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
-            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">목표값으로 역산</div>
-            <div className="text-[10px] text-[#6b6b77]">현재 타입·base 기준으로 목표 레벨에서 목표값이 되는 factor 를 계산합니다.</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <div className="text-[11px] text-[#9a9aa3] mb-1">목표 레벨</div>
-                <Input placeholder="예: 30" value={solveTargetLevel} onChange={(e) => { setSolveTargetLevel(e.target.value); setSolveResult(null); }} />
-              </div>
-              <div>
-                <div className="text-[11px] text-[#9a9aa3] mb-1">목표값</div>
-                <Input placeholder="예: 100000" value={solveTargetValue} onChange={(e) => { setSolveTargetValue(e.target.value); setSolveResult(null); }} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <Btn onClick={runSolve} disabled={!solveTargetLevel.trim() || !solveTargetValue.trim()}><Sparkles size={11} />factor 역산</Btn>
-              {solveResult && (solveResult.ok
-                ? <div className="text-[10px] text-[#4ade80]">factor 적용됨 · 도달값 {solveResult.achievedValue?.toLocaleString()}</div>
-                : <div className="text-[10px] text-[#f87171]">해 없음 (목표 도달 불가 / 레벨 1)</div>
-              )}
-            </div>
-          </div>
-          )}
+      <AnnotationModal
+        projectId={projectId}
+        selectedId={selectedId}
+        annotationTarget={annotationTarget}
+        setAnnotationTarget={setAnnotationTarget}
+        annotationsByRow={annotationsByRow}
+        noteInput={noteInput}
+        setNoteInput={setNoteInput}
+        annotationLoading={annotationLoading}
+        setAnnotationLoading={setAnnotationLoading}
+        loadAnnotations={loadAnnotations}
+      />
 
-          {/* 점에서 곡선 맞추기 (피팅) */}
-          <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3 space-y-2">
-            <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">점에서 곡선 맞추기</div>
-            <div className="text-[10px] text-[#6b6b77]">{curve.type === "s_curve" ? "(레벨, 값) 점들을 입력하면 S-Curve로 base·range·rate·midpoint 를 역산합니다." : "(레벨, 값) 점들을 입력하면 현재 타입으로 base·factor 를 역산합니다."}</div>
-            <div className="space-y-1">
-              <div className="flex gap-2 text-[10px] text-[#4a4a55] px-0.5">
-                <div className="flex-1">레벨</div>
-                <div className="flex-1">값</div>
-                <div className="w-6" />
-              </div>
-              {fitPoints.map((p, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <div className="flex-1">
-                    <Input placeholder="예: 1" value={p.level} onChange={(e) => { setFitPoints((prev) => prev.map((q, j) => j === i ? { ...q, level: e.target.value } : q)); setFitResult(null); }} />
-                  </div>
-                  <div className="flex-1">
-                    <Input placeholder="예: 100" value={p.value} onChange={(e) => { setFitPoints((prev) => prev.map((q, j) => j === i ? { ...q, value: e.target.value } : q)); setFitResult(null); }} />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setFitPoints((prev) => prev.length > 1 ? prev.filter((_, j) => j !== i) : prev); setFitResult(null); }}
-                    disabled={fitPoints.length <= 1}
-                    className="w-6 h-6 flex items-center justify-center rounded text-[#6b6b77] hover:text-[#f87171] hover:bg-[#2a2a2f] disabled:opacity-30 disabled:hover:text-[#6b6b77] disabled:hover:bg-transparent"
-                    title="점 삭제"
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <Btn onClick={() => { setFitPoints((prev) => [...prev, { level: "", value: "" }]); setFitResult(null); }}><Plus size={11} />점 추가</Btn>
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <Btn onClick={runFit}><Sparkles size={11} />맞추기</Btn>
-              {fitResult && (fitResult.ok
-                ? <div className="text-[10px] text-[#4ade80]">파라미터 적용됨 · 적합도 R²={fitResult.r2?.toFixed(2)}</div>
-                : <div className="text-[10px] text-[#f87171]">점 2개 이상을 입력하세요</div>
-              )}
-            </div>
-          </div>
-
-          {/* 미리보기 */}
-          {curvePreview.length > 0 && (
-            <div className="bg-[#0f0f10] border border-[#2a2a2f] rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] font-semibold text-[#4a4a55] uppercase tracking-widest">미리보기</div>
-                <div className="text-[10px] text-[#6b6b77]">Lv1 {curvePreview[0].toLocaleString()} → Lv{curvePreview.length} {curvePreview[curvePreview.length - 1].toLocaleString()}</div>
-              </div>
-              <div className="flex items-end gap-px h-16">
-                {(() => {
-                  const max = Math.max(...curvePreview, 1);
-                  const step = Math.max(1, Math.ceil(curvePreview.length / 40));
-                  return curvePreview.filter((_, i) => i % step === 0).map((v, i) => (
-                    <div key={i} className="flex-1 bg-[#7c3aed] rounded-t-sm min-w-0" style={{ height: `${Math.max(2, (v / max) * 100)}%` }} title={v.toLocaleString()} />
-                  ));
-                })()}
-              </div>
-            </div>
-          )}
-
-          <label className="flex items-center gap-2 text-[11px] text-[#9a9aa3] cursor-pointer">
-            <input type="checkbox" checked={curve.replace} onChange={(e) => setCurve({ ...curve, replace: e.target.checked })} className="accent-[#7c3aed]" />
-            기존 행을 모두 지우고 새로 생성 (체크 해제 시 추가)
-          </label>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Btn onClick={() => setShowCurve(false)}>취소</Btn>
-            <Btn variant="primary" onClick={runCurve} disabled={!curve.value_column.trim() || curvePreview.length === 0}><TrendingUp size={11} />생성</Btn>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 수치 근거 메모 모달 (P3-5): 선택 행의 메모 목록 + 새 메모 입력. surface-not-block. */}
-      <Modal open={!!annotationTarget} onClose={() => setAnnotationTarget(null)} title="수치 근거 메모">
-        {annotationTarget && (
-          <>
-            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-              {(annotationsByRow.get(annotationTarget.rowId) ?? []).map((a) => (
-                <div key={a.id} className="flex items-start gap-2 bg-[#1e1e24] rounded p-2.5">
-                  <p className="flex-1 text-[12px] text-[#ededed] whitespace-pre-wrap">{a.note}</p>
-                  <button
-                    onClick={async () => {
-                      await fetch("/api/annotations", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: a.id }) });
-                      await loadAnnotations();
-                    }}
-                    className="text-[#6b6b77] hover:text-[#f87171] text-[10px] flex-shrink-0"
-                  >삭제</button>
-                </div>
-              ))}
-              {(annotationsByRow.get(annotationTarget.rowId) ?? []).length === 0 && (
-                <p className="text-[11px] text-[#4a4a55]">등록된 메모가 없습니다.</p>
-              )}
-            </div>
-            <textarea
-              value={noteInput}
-              onChange={(e) => setNoteInput(e.target.value)}
-              placeholder="이 행의 수치를 결정한 근거를 기록하세요..."
-              className="w-full bg-[#1e1e24] border border-[#2a2a2f] rounded text-[12px] text-[#ededed] p-2.5 resize-none h-20 focus:outline-none focus:border-[#7c3aed]"
-            />
-            <div className="flex justify-end gap-2 mt-3">
-              <Btn onClick={() => setAnnotationTarget(null)}>닫기</Btn>
-              <Btn variant="primary" disabled={!noteInput.trim() || annotationLoading} onClick={async () => {
-                if (!selectedId) return;
-                setAnnotationLoading(true);
-                try {
-                  await fetch("/api/annotations", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ project_id: projectId, table_id: selectedId, row_id: annotationTarget.rowId, note: noteInput.trim() }),
-                  });
-                  setNoteInput("");
-                  await loadAnnotations();
-                } catch (e) { console.error(e); }
-                setAnnotationLoading(false);
-              }}>저장</Btn>
-            </div>
-          </>
-        )}
-      </Modal>
-
-      {/* 스냅샷 비교 모달 */}
-      <Modal open={showDiff} onClose={() => setShowDiff(false)} title="스냅샷 비교">
-        <div className="flex gap-2 mb-4 items-end">
-          <div className="flex-1">
-            <label className="text-[10px] text-[#6b6b77] mb-1 block">기준 (A)</label>
-            <select value={diffA} onChange={(e) => setDiffA(e.target.value)} className="w-full bg-[#1e1e24] border border-[#2a2a2f] rounded text-[12px] text-[#ededed] px-2 py-1.5">
-              <option value="">선택</option>
-              {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="text-[10px] text-[#6b6b77] mb-1 block">비교 (B)</label>
-            <select value={diffB} onChange={(e) => setDiffB(e.target.value)} className="w-full bg-[#1e1e24] border border-[#2a2a2f] rounded text-[12px] text-[#ededed] px-2 py-1.5">
-              <option value="">선택</option>
-              {snapshots.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <Btn variant="primary" disabled={!diffA || !diffB || diffLoading} onClick={runDiff}>
-            {diffLoading ? "비교 중..." : "비교"}
-          </Btn>
-        </div>
-        {diffResult && (
-          <>
-            <div className="text-[11px] text-[#6b6b77] mb-3">
-              +{diffResult.diff.added} 추가 / -{diffResult.diff.removed} 삭제 / ~{diffResult.diff.changed} 변경
-            </div>
-            <div className="max-h-80 overflow-y-auto space-y-1">
-              {diffResult.diff.rows.map((row) => (
-                <div key={row.row_id} className={`px-3 py-2 rounded text-[11px] ${
-                  row.type === "added" ? "bg-[#14532d]/30 border-l-2 border-[#4ade80]" :
-                  row.type === "removed" ? "bg-[#450a0a]/30 border-l-2 border-[#f87171]" :
-                  "bg-[#2a1f00]/30 border-l-2 border-[#f59e0b]"
-                }`}>
-                  <span className={row.type === "added" ? "text-[#4ade80]" : row.type === "removed" ? "text-[#f87171]" : "text-[#f59e0b]"}>
-                    {row.type === "added" ? "+" : row.type === "removed" ? "−" : "~"}
-                  </span>
-                  {" "}행 {row.row_id.slice(0, 8)}
-                  {row.type === "changed" && ` (${row.changedKeys.join(", ")})`}
-                </div>
-              ))}
-              {diffResult.diff.rows.length === 0 && (
-                <p className="text-[11px] text-[#4a4a55] text-center py-4">변경 없음</p>
-              )}
-            </div>
-          </>
-        )}
-      </Modal>
+      <SnapshotDiffModal
+        open={showDiff}
+        onClose={() => setShowDiff(false)}
+        snapshots={snapshots}
+        diffA={diffA}
+        setDiffA={setDiffA}
+        diffB={diffB}
+        setDiffB={setDiffB}
+        diffResult={diffResult}
+        diffLoading={diffLoading}
+        runDiff={runDiff}
+      />
     </div>
   );
 }
