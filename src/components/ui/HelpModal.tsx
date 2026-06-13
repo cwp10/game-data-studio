@@ -225,25 +225,60 @@ function EditorContent() {
       <ToolbarRow
         title="툴바 버튼"
         items={[
-          { icon: Undo2,     label: "실행 취소",   desc: "마지막 편집을 되돌립니다. (Ctrl+Z)" },
-          { icon: Redo2,     label: "다시 실행",   desc: "되돌린 편집을 다시 적용합니다. (Ctrl+Shift+Z)" },
-          { icon: Upload,    label: "CSV 임포트",  desc: "CSV 파일을 불러와 행을 일괄 추가합니다." },
-          { icon: Download,  label: "내보내기",    desc: "CSV 또는 JSON 형식으로 저장합니다." },
-          { icon: Save,      label: "스냅샷 저장", desc: "현재 상태를 버전으로 저장합니다." },
-          { icon: GitCompare,label: "버전 비교",   desc: "저장된 스냅샷과 현재 데이터 차이를 확인합니다." },
+          { icon: Trash2,    label: "행 삭제",      desc: "선택된 행을 삭제합니다. Ctrl+Z로 복구 가능합니다." },
+          { icon: Undo2,     label: "실행 취소",    desc: "셀 편집·행 삭제를 포함한 마지막 작업을 되돌립니다. (Ctrl+Z)" },
+          { icon: Redo2,     label: "다시 실행",    desc: "되돌린 작업을 다시 적용합니다. (Ctrl+Shift+Z)" },
+          { icon: Upload,    label: "CSV 임포트",   desc: "CSV 파일을 불러와 행을 일괄 추가합니다." },
+          { icon: Download,  label: "내보내기",     desc: "CSV 또는 JSON 형식으로 저장합니다." },
+          { icon: Save,      label: "스냅샷 저장",  desc: "현재 상태를 버전으로 저장합니다." },
+          { icon: GitCompare,label: "버전 비교",    desc: "저장된 스냅샷과 현재 데이터 차이를 확인합니다." },
           { icon: TrendingUp,label: "성장 곡선 생성", desc: "레벨별 수치를 수식으로 자동 채웁니다." },
           { icon: Sparkles,  label: "AI 밸런스 분석", desc: "AI가 이상값을 분석하고 권장값을 제시합니다." },
           { icon: Eye,       label: "컬럼 표시/숨김", desc: "보고 싶은 컬럼만 선택해 화면에 표시합니다." },
         ]}
       />
+      <Divider />
+      <SectionLabel>셀 선택 방법</SectionLabel>
+      <div className="flex flex-col gap-1.5 mb-5">
+        {[
+          { how: "셀 클릭",          desc: "단일 셀 선택." },
+          { how: "마우스 드래그",    desc: "드래그한 영역의 셀을 범위 선택합니다." },
+          { how: "Shift + 클릭",     desc: "처음 선택한 셀부터 클릭 셀까지 범위를 확장합니다." },
+          { how: "Ctrl + 클릭",      desc: "비연속 셀을 개별로 추가·토글합니다. 이미 선택된 셀은 해제됩니다." },
+          { how: "행 번호 클릭",     desc: "해당 행 전체 셀을 선택합니다. Shift·Ctrl 조합도 동일하게 적용됩니다." },
+          { how: "컬럼 헤더 클릭",   desc: "해당 컬럼 전체 셀을 선택합니다. Shift·Ctrl 조합도 동일하게 적용됩니다." },
+          { how: "빈 영역 클릭",     desc: "셀 선택을 전체 해제합니다." },
+        ].map(({ how, desc }) => (
+          <div key={how} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-[#16161e] border border-[#2a2a3a]">
+            <span className="px-1.5 py-0.5 rounded bg-[#2a2a3a] border border-[#3a3a4a] text-[10px] text-[#a78bfa] whitespace-nowrap flex-shrink-0">{how}</span>
+            <span className="text-[11px] text-[#6b6b77] leading-relaxed">{desc}</span>
+          </div>
+        ))}
+      </div>
       <ShortcutGrid
         items={[
-          { key: "⌘ Z",       desc: "실행 취소" },
-          { key: "⌘ ⇧ Z",    desc: "다시 실행" },
-          { key: "⌘ C",       desc: "셀 복사" },
-          { key: "⌘ V",       desc: "붙여넣기" },
-          { key: "Enter",     desc: "셀 편집 확정" },
-          { key: "Tab",       desc: "다음 셀로 이동" },
+          { key: "Ctrl Z",      desc: "실행 취소 (행 삭제 복구 포함)" },
+          { key: "Ctrl ⇧ Z",   desc: "다시 실행" },
+          { key: "Ctrl C",      desc: "선택 셀 복사" },
+          { key: "Ctrl V",      desc: "붙여넣기" },
+          { key: "Del / ⌫",    desc: "선택 셀 값 지우기" },
+          { key: "↑ ↓ ← →",   desc: "셀 이동 (화면 자동 스크롤)" },
+          { key: "Tab",         desc: "다음 셀로 이동" },
+          { key: "Enter",       desc: "셀 편집 확정" },
+        ]}
+      />
+      <Divider />
+      <StepList
+        title="행 추가 / 컬럼 너비 조절"
+        items={[
+          {
+            label: <>테이블 하단 <IBtn icon={Plus} label="행 추가" /> 클릭 시 팝업이 열립니다.</>,
+            sub: "수량 입력란에 직접 입력하거나 ±1/5/10 버튼으로 조절 후 확인합니다.",
+          },
+          {
+            label: <>컬럼 헤더 오른쪽 끝에 마우스를 올리면 <strong className="text-[#ededed]">↔ 리사이즈 핸들</strong>이 나타납니다.</>,
+            sub: "핸들을 드래그하면 해당 컬럼 너비가 실시간으로 조절됩니다. 최소 너비는 40px입니다.",
+          },
         ]}
       />
       <Divider />
