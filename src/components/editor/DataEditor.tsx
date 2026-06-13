@@ -10,7 +10,7 @@ import { fitCurve } from "@/lib/curve/fit";
 import { CurveModal, type CurveState } from "@/components/editor/CurveModal";
 import { AnnotationModal } from "@/components/editor/AnnotationModal";
 import { SnapshotDiffModal, type DiffResultData } from "@/components/editor/SnapshotDiffModal";
-import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd } from "@/components/editor/useGridState";
+import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd, type RowsDeleteCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
 const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
@@ -40,6 +40,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   // 셀 선택(복붙용). selectedRowIds(행 선택, 삭제용)와 완전 분리·공존. activeCell=시작, anchorCell=범위 반대편.
   const [activeCell, setActiveCell] = useState<{ rowId: string; col: string } | null>(null);
   const [anchorCell, setAnchorCell] = useState<{ rowId: string; col: string } | null>(null);
+  // Ctrl+클릭으로 추가된 비연속 셀/범위. 각 항목이 독립적인 직사각형 범위.
+  type CellRange = { active: { rowId: string; col: string }; anchor: { rowId: string; col: string } | null };
+  const [additionalRanges, setAdditionalRanges] = useState<CellRange[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [showColToggle, setShowColToggle] = useState(false);
@@ -66,6 +69,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [fitPoints, setFitPoints] = useState<{ level: string; value: string }[]>([{ level: "1", value: "" }, { level: "2", value: "" }]);
   const [fitResult, setFitResult] = useState<{ ok: boolean; r2?: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
   const balanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickedRowRef = useRef<string | null>(null);
   // annotations (수치 근거 메모): row_id별 메모 목록. 행 우측 StickyNote 아이콘 + 모달.
@@ -74,9 +78,16 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [noteInput, setNoteInput] = useState("");
   const [annotationLoading, setAnnotationLoading] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [showAddRowModal, setShowAddRowModal] = useState(false);
+  const [addRowCount, setAddRowCount] = useState(1);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const isUndoRedoInProgressRef = useRef(false);
+  const isResizingRef = useRef(false);
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const DEFAULT_COL_WIDTH = 120;
 
   const loadTables = () => fetch(`/api/tables?project_id=${projectId}`).then((r) => r.json()).then((t: Table[]) => { setTables(t); if (!selectedId && t.length) setSelectedId(t[0].id); });
   const loadData = (tid: string) => Promise.all([
@@ -135,13 +146,16 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     setChartY(firstInit || keepY.length === 0 ? nums.filter((c) => c !== x).slice(0, 2) : keepY);
   }, [selectedId, columns, chartX, chartY]);
 
-  const addRow = async () => {
+  const addRows = async (count: number) => {
     if (!selectedId) return;
-    const data: Record<string, unknown> = {};
-    columns.forEach((c) => { data[c.name] = c.type === "number" ? 0 : ""; });
-    const r = await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, data }) });
-    const row = await r.json();
-    grid.append(row);
+    setShowAddRowModal(false);
+    for (let i = 0; i < count; i++) {
+      const data: Record<string, unknown> = {};
+      columns.forEach((c) => { data[c.name] = c.type === "number" ? 0 : ""; });
+      const r = await fetch("/api/rows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table_id: selectedId, data }) });
+      const row = await r.json();
+      grid.append(row);
+    }
   };
 
   const handleRowClick = (rowId: string, e: React.MouseEvent) => {
@@ -184,12 +198,19 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
       } catch (e) { console.error(e); }
     }
     if (!confirm(`${selectedRowIds.size}행을 삭제합니다.${refWarning}`)) return;
+    // 삭제 전 행 데이터와 위치 보존 (undo 복구용)
+    const deletedRows: Row[] = [];
+    const deletedIndices: number[] = [];
+    for (const id of ids) {
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx >= 0) { deletedRows.push(rows[idx]); deletedIndices.push(idx); }
+    }
     await fetch("/api/rows", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ row_ids: ids }),
     });
-    grid.deleteByIds(ids);
+    grid.deleteWithUndo(deletedRows, deletedIndices);
     setSelectedRowIds(new Set());
     scheduleBalance();
     runFkCheck();
@@ -240,29 +261,203 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   };
 
   // Undo/Redo: reducer는 순수하므로 DB 라운드트립(POST)을 컴포넌트에서 처리. 성공 시에만 dispatch.
+  // isUndoRedoInProgressRef: 연속 Ctrl+Z 시 같은 entry가 중복 처리되는 race condition 방지.
   const handleUndo = async () => {
-    const group = grid.undoTop;
-    if (!group) return;
-    if (!(await postGroup(group, "before"))) return;
-    grid.undo();
-    scheduleBalance();
+    if (isUndoRedoInProgressRef.current) return;
+    const entry = grid.undoTop;
+    if (!entry) return;
+    isUndoRedoInProgressRef.current = true;
+    try {
+      if (!Array.isArray(entry)) {
+        // 행 삭제 undo: 삭제된 행을 DB에 복구
+        const cmd = entry as RowsDeleteCmd;
+        for (const row of cmd.rows) await postRow(row.id, row.data);
+        grid.undo();
+        scheduleBalance();
+        runFkCheck();
+      } else {
+        if (!(await postGroup(entry, "before"))) return;
+        grid.undo();
+        scheduleBalance();
+      }
+    } finally {
+      isUndoRedoInProgressRef.current = false;
+    }
   };
   const handleRedo = async () => {
-    const group = grid.redoTop;
-    if (!group) return;
-    if (!(await postGroup(group, "after"))) return;
-    grid.redo();
-    scheduleBalance();
+    if (isUndoRedoInProgressRef.current) return;
+    const entry = grid.redoTop;
+    if (!entry) return;
+    isUndoRedoInProgressRef.current = true;
+    try {
+      if (!Array.isArray(entry)) {
+        // 행 삭제 redo: DB에서 다시 삭제
+        const cmd = entry as RowsDeleteCmd;
+        const ids = cmd.rows.map((r) => r.id);
+        await fetch("/api/rows", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ row_ids: ids }) });
+        grid.redo();
+        scheduleBalance();
+        runFkCheck();
+      } else {
+        if (!(await postGroup(entry, "after"))) return;
+        grid.redo();
+        scheduleBalance();
+      }
+    } finally {
+      isUndoRedoInProgressRef.current = false;
+    }
   };
 
-  // 셀 클릭: activeCell만 설정(이벤트는 tr로 버블 → 기존 행 선택 동작 보존). shift+클릭 = 범위 확장.
-  const handleCellClick = (rowId: string, col: string, e: React.MouseEvent) => {
+  // 셀 mousedown: 드래그 선택 시작. shift+클릭 = 범위 확장. ctrl+클릭 = 비연속 셀 토글.
+  const handleCellMouseDown = (rowId: string, col: string, e: React.MouseEvent) => {
+    if (e.button !== 0 || isResizingRef.current) return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      setAdditionalRanges((prev) => {
+        // 동일 단일 셀이 이미 있으면 제거(토글), 없으면 추가
+        const idx = prev.findIndex((r) => r.active.rowId === rowId && r.active.col === col && !r.anchor);
+        return idx >= 0 ? prev.filter((_, i) => i !== idx) : [...prev, { active: { rowId, col }, anchor: null }];
+      });
+      return;
+    }
+    setAdditionalRanges([]);
     if (e.shiftKey && activeCell) {
       setAnchorCell({ rowId, col });
     } else {
       setActiveCell({ rowId, col });
       setAnchorCell(null);
     }
+    isDraggingRef.current = true;
+  };
+
+  // 컬럼 너비 드래그 리사이즈. isResizingRef로 셀 드래그 선택과 충돌 방지.
+  const startResize = (colName: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = colWidths[colName] ?? DEFAULT_COL_WIDTH;
+    const onMouseMove = (ev: MouseEvent) => {
+      const newWidth = Math.max(40, startWidth + ev.clientX - startX);
+      setColWidths((prev) => ({ ...prev, [colName]: newWidth }));
+    };
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  // 컬럼 헤더 클릭: 해당 컬럼 전체 셀을 선택. Shift=범위 확장. Ctrl=비연속 추가/토글.
+  const handleColumnHeaderClick = (colName: string, ci: number, e: React.MouseEvent) => {
+    if (!filteredRows.length) return;
+    const firstRow = filteredRows[0].id;
+    const lastRow = filteredRows[filteredRows.length - 1].id;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      setSelectedRowIds(new Set());
+      setAdditionalRanges((prev) => {
+        const exists = prev.findIndex((r) => r.active.col === colName && r.anchor?.col === colName);
+        return exists >= 0 ? prev.filter((_, i) => i !== exists) : [...prev, { active: { rowId: firstRow, col: colName }, anchor: { rowId: lastRow, col: colName } }];
+      });
+      return;
+    }
+    if (e.shiftKey && activeCell) {
+      const anchorColIdx = visibleColumns.findIndex((c) => c.name === activeCell.col);
+      const from = Math.min(anchorColIdx, ci);
+      const to = Math.max(anchorColIdx, ci);
+      setActiveCell({ rowId: firstRow, col: visibleColumns[from].name });
+      setAnchorCell({ rowId: lastRow, col: visibleColumns[to].name });
+      setAdditionalRanges([]);
+      setSelectedRowIds(new Set());
+    } else {
+      setActiveCell({ rowId: firstRow, col: colName });
+      setAnchorCell({ rowId: lastRow, col: colName });
+      setAdditionalRanges([]);
+      setSelectedRowIds(new Set());
+    }
+  };
+
+  // 행 번호 클릭: 해당 행 전체 셀을 activeCell~anchorCell로 선택 + selectedRowIds 업데이트.
+  // Shift+클릭 = 범위 확장. Ctrl+클릭 = 행 단위 비연속 추가/토글.
+  const handleRowNumberClick = (rowId: string, idx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!visibleColumns.length) return;
+    const firstCol = visibleColumns[0].name;
+    const lastCol = visibleColumns[visibleColumns.length - 1].name;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      setAdditionalRanges((prev) => {
+        const exists = prev.findIndex((r) => r.active.rowId === rowId && r.anchor?.rowId === rowId);
+        return exists >= 0 ? prev.filter((_, i) => i !== exists) : [...prev, { active: { rowId, col: firstCol }, anchor: { rowId, col: lastCol } }];
+      });
+      return;
+    }
+    if (e.shiftKey && activeCell) {
+      const anchorRowIdx = filteredRows.findIndex((r) => r.id === activeCell.rowId);
+      const from = Math.min(anchorRowIdx, idx);
+      const to = Math.max(anchorRowIdx, idx);
+      setSelectedRowIds(new Set(filteredRows.slice(from, to + 1).map((r) => r.id)));
+      setActiveCell({ rowId: filteredRows[from].id, col: firstCol });
+      setAnchorCell({ rowId: filteredRows[to].id, col: lastCol });
+      setAdditionalRanges([]);
+    } else {
+      setSelectedRowIds(new Set([rowId]));
+      setActiveCell({ rowId, col: firstCol });
+      setAnchorCell({ rowId, col: lastCol });
+      setAdditionalRanges([]);
+    }
+  };
+
+  // 스프레드시트 영역 빈 곳(td 밖) 클릭 시 셀 선택 전체 해제
+  const handleGridAreaMouseDown = (e: React.MouseEvent) => {
+    if (!(e.target as HTMLElement).closest("td")) {
+      setActiveCell(null);
+      setAnchorCell(null);
+      setAdditionalRanges([]);
+    }
+  };
+
+  // 드래그 중 마우스가 셀에 진입하면 anchorCell 확장
+  const handleCellMouseEnter = (rowId: string, col: string) => {
+    if (!isDraggingRef.current) return;
+    setAnchorCell({ rowId, col });
+  };
+
+  // 선택 범위 셀을 빈값으로 초기화 (id 컬럼 제외). 주 범위 + additionalRanges 모두 처리.
+  const deleteSelection = async () => {
+    const rows_ = filteredRowsRef.current;
+    const cols_ = visibleColumnsRef.current;
+    const seen = new Set<string>();
+    const cmds: CellCmd[] = [];
+    const addCmd = (ri: number, ci: number) => {
+      const row = rows_[ri], col = cols_[ci];
+      if (!row || !col || col.name === "id") return;
+      const key = `${row.id}:${col.name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const before = row.data[col.name];
+      const after = col.type === "number" ? 0 : "";
+      if (before === after) return;
+      cmds.push({ rowId: row.id, col: col.name, before, after });
+    };
+    const r = selectionRange();
+    if (r) for (let ri = r.r0; ri <= r.r1; ri++) for (let ci = r.c0; ci <= r.c1; ci++) addCmd(ri, ci);
+    for (const ar of additionalRanges) {
+      const ar_ = rows_.findIndex((x) => x.id === ar.active.rowId);
+      const ac_ = cols_.findIndex((x) => x.name === ar.active.col);
+      const br_ = ar.anchor ? rows_.findIndex((x) => x.id === ar.anchor!.rowId) : ar_;
+      const bc_ = ar.anchor ? cols_.findIndex((x) => x.name === ar.anchor!.col) : ac_;
+      for (let ri = Math.min(ar_, br_); ri <= Math.max(ar_, br_); ri++)
+        for (let ci = Math.min(ac_, bc_); ci <= Math.max(ac_, bc_); ci++) addCmd(ri, ci);
+    }
+    if (!cmds.length) return;
+    if (!(await postGroup(cmds, "after"))) return;
+    grid.batchUpdate(cmds);
+    scheduleBalance();
+    runValidate();
   };
 
   // activeCell~anchorCell 사각형 범위를 화면상의 filteredRows·visibleColumns idx로 환산.
@@ -280,10 +475,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   const isCellSelected = (rowId: string, col: string): boolean => {
     const range = selectionRange();
-    if (!range) return false;
     const r = filteredRows.findIndex((x) => x.id === rowId);
     const c = visibleColumns.findIndex((x) => x.name === col);
-    return r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1;
+    if (range && r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1) return true;
+    for (const ar of additionalRanges) {
+      const ar_ = filteredRows.findIndex((x) => x.id === ar.active.rowId);
+      const ac_ = visibleColumns.findIndex((x) => x.name === ar.active.col);
+      const br_ = ar.anchor ? filteredRows.findIndex((x) => x.id === ar.anchor!.rowId) : ar_;
+      const bc_ = ar.anchor ? visibleColumns.findIndex((x) => x.name === ar.anchor!.col) : ac_;
+      if (r >= Math.min(ar_, br_) && r <= Math.max(ar_, br_) && c >= Math.min(ac_, bc_) && c <= Math.max(ac_, bc_)) return true;
+    }
+    return false;
   };
 
   // Electron clipboard 우선, 없으면 navigator.clipboard 폴백.
@@ -338,8 +540,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   };
 
   // 단축키 핸들러를 ref에 보관(매 렌더 갱신)해 stale closure 없이 [] deps 리스너에서 최신 값 호출.
-  const shortcutRef = useRef({ handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell, setActiveCell, setAnchorCell });
-  shortcutRef.current = { handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell, setActiveCell, setAnchorCell };
+  const shortcutRef = useRef({ handleUndo, handleRedo, copySelection, pasteSelection, deleteSelection, editing, activeCell, setActiveCell, setAnchorCell });
+  shortcutRef.current = { handleUndo, handleRedo, copySelection, pasteSelection, deleteSelection, editing, activeCell, setActiveCell, setAnchorCell };
   // filteredRows·visibleColumns는 아래 선언 후 별도 ref로 관리 (선언 순서 제약 우회)
   const filteredRowsRef = useRef<Row[]>([]);
   const visibleColumnsRef = useRef<Column[]>([]);
@@ -350,7 +552,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
       const isCopy = (e.metaKey || e.ctrlKey) && k === "c";
       const isPaste = (e.metaKey || e.ctrlKey) && k === "v";
       const isTab = e.key === "Tab";
-      if (!isUndoRedo && !isCopy && !isPaste && !isTab) return;
+      const isArrow = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key);
+      const isDelete = e.key === "Delete" || e.key === "Backspace";
+      if (!isUndoRedo && !isCopy && !isPaste && !isTab && !isArrow && !isDelete) return;
       // 가드: 셀 편집 중이거나 입력 요소에 포커스가 있으면(채팅·검색) 브라우저 기본 동작 우선.
       const el = document.activeElement;
       const tag = el?.tagName.toLowerCase();
@@ -385,6 +589,32 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         setAnc(next);
         return;
       }
+      if (isArrow) {
+        const { activeCell: ac, setActiveCell: setAC, setAnchorCell: setAnc } = shortcutRef.current;
+        if (!ac) return;
+        e.preventDefault();
+        const rows = filteredRowsRef.current;
+        const cols = visibleColumnsRef.current;
+        const rowIdx = rows.findIndex((r) => r.id === ac.rowId);
+        const colIdx = cols.findIndex((c) => c.name === ac.col);
+        if (rowIdx < 0 || colIdx < 0) return;
+        let nextRow = rowIdx;
+        let nextCol = colIdx;
+        if (e.key === "ArrowUp") nextRow = Math.max(0, rowIdx - 1);
+        else if (e.key === "ArrowDown") nextRow = Math.min(rows.length - 1, rowIdx + 1);
+        else if (e.key === "ArrowLeft") nextCol = Math.max(0, colIdx - 1);
+        else if (e.key === "ArrowRight") nextCol = Math.min(cols.length - 1, colIdx + 1);
+        const next = { rowId: rows[nextRow].id, col: cols[nextCol].name };
+        setAC(next);
+        setAnc(null);
+        return;
+      }
+      if (isDelete) {
+        if (!shortcutRef.current.activeCell) return;
+        e.preventDefault();
+        shortcutRef.current.deleteSelection();
+        return;
+      }
       const isRedo = k === "y" || (k === "z" && e.shiftKey);
       e.preventDefault();
       if (isRedo) shortcutRef.current.handleRedo(); else shortcutRef.current.handleUndo();
@@ -392,6 +622,26 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     document.addEventListener("keydown", onKeyDown, { capture: true });
     return () => document.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
+
+  useEffect(() => {
+    const onMouseUp = () => { isDraggingRef.current = false; };
+    document.addEventListener("mouseup", onMouseUp);
+    return () => document.removeEventListener("mouseup", onMouseUp);
+  }, []);
+
+  // activeCell 변경 시 해당 셀이 스크롤 영역 밖이면 자동 스크롤.
+  useEffect(() => {
+    if (!activeCell || !gridContainerRef.current) return;
+    const rowIdx = filteredRowsRef.current.findIndex((r) => r.id === activeCell.rowId);
+    const colIdx = visibleColumnsRef.current.findIndex((c) => c.name === activeCell.col);
+    if (rowIdx < 0 || colIdx < 0) return;
+    const tbody = gridContainerRef.current.querySelector("tbody");
+    if (!tbody) return;
+    const tr = (tbody as HTMLTableSectionElement).rows[rowIdx];
+    if (!tr) return;
+    const td = tr.cells[colIdx + 1]; // +1은 행번호 td
+    td?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeCell]);
 
   const runBalance = async () => {
     if (!selectedId) return;
@@ -691,6 +941,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   })();
   const chartSeries = chartY.map((name, i) => ({ name, color: CHART_PALETTE[i % CHART_PALETTE.length], values: chartRows.map((r) => Number(r.data[name])) }));
   const chartXLabels = chartRows.map((r) => String(r.data[chartX] ?? ""));
+  const range = selectionRange();
+  // 컬럼 너비 합 + 행번호(28px) + 메모(28px) = 테이블 총 너비
+  const totalTableWidth = visibleColumns.reduce((sum, c) => sum + (colWidths[c.name] ?? DEFAULT_COL_WIDTH), 0) + 56;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -769,8 +1022,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           </div>
 
           {/* 스프레드시트 */}
-          <div className="flex-1 overflow-auto">
-            <table className="w-full border-collapse text-xs">
+          <div ref={gridContainerRef} className="flex-1 overflow-auto" onMouseDown={handleGridAreaMouseDown}>
+            <table className="border-collapse text-xs select-none" style={{ tableLayout: "fixed", width: totalTableWidth }}>
               <thead>
                 <tr className="bg-[#16161a]">
                   <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77] w-7 text-center relative">
@@ -810,9 +1063,23 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                       </>
                     )}
                   </th>
-                  {visibleColumns.map((c) => (
-                    <th key={c.id} className="px-2.5 py-1.5 border-b border-[#2a2a2f] text-left text-[11px] font-medium text-[#6b6b77] whitespace-nowrap">{c.name}</th>
-                  ))}
+                  {visibleColumns.map((c, ci) => {
+                    const colHighlighted = (range && ci >= range.c0 && ci <= range.c1) ||
+                      additionalRanges.some((ar) => {
+                        const ac_ = visibleColumns.findIndex((x) => x.name === ar.active.col);
+                        const bc_ = ar.anchor ? visibleColumns.findIndex((x) => x.name === ar.anchor!.col) : ac_;
+                        return ci >= Math.min(ac_, bc_) && ci <= Math.max(ac_, bc_);
+                      });
+                    return (
+                      <th key={c.id} style={{ width: colWidths[c.name] ?? DEFAULT_COL_WIDTH }} className={`relative px-2.5 py-1.5 border-b border-[#2a2a2f] text-left text-[11px] font-medium whitespace-nowrap transition-colors cursor-pointer select-none overflow-hidden ${colHighlighted ? "bg-[#1e1b3a] text-[#a78bfa]" : "text-[#6b6b77] hover:text-[#9a9aa3] hover:bg-[#1e1e24]"}`} onClick={(e) => handleColumnHeaderClick(c.name, ci, e)}>
+                        <span className="block truncate">{c.name}</span>
+                        <div
+                          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[#7c3aed]/60 active:bg-[#7c3aed] z-10"
+                          onMouseDown={(e) => startResize(c.name, e)}
+                        />
+                      </th>
+                    );
+                  })}
                   <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] w-7" />
                 </tr>
               </thead>
@@ -821,9 +1088,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                   <tr
                     key={row.id}
                     onClick={(e) => handleRowClick(row.id, e)}
-                    className={`cursor-pointer border-b border-[#2a2a2f] ${selectedRowIds.has(row.id) ? "bg-[#1e1b4b]" : "hover:bg-[#1e1e24]"}`}
+                    className="cursor-pointer border-b border-[#2a2a2f] hover:bg-[#1e1e24]"
                   >
-                    <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#4a4a55] text-[11px] text-center">{idx + 1}</td>
+                    {(() => {
+                      const rowHighlighted = (range && idx >= range.r0 && idx <= range.r1) ||
+                        additionalRanges.some((ar) => {
+                          const ar_ = filteredRows.findIndex((x) => x.id === ar.active.rowId);
+                          const br_ = ar.anchor ? filteredRows.findIndex((x) => x.id === ar.anchor!.rowId) : ar_;
+                          return idx >= Math.min(ar_, br_) && idx <= Math.max(ar_, br_);
+                        });
+                      return <td className={`px-1.5 py-1.5 border-b border-[#2a2a2f] text-[11px] text-center transition-colors cursor-pointer select-none ${rowHighlighted ? "bg-[#1e1b3a] text-[#a78bfa] font-medium" : "text-[#4a4a55] hover:text-[#9a9aa3] hover:bg-[#1e1e24]"}`} onClick={(e) => handleRowNumberClick(row.id, idx, e)}>{idx + 1}</td>;
+                    })()}
                     {visibleColumns.map((c) => {
                       const anomaly = getAnomaly(row.id, c.name);
                       const cellViolations = getViolations(row.id, c.name);
@@ -839,8 +1114,9 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                         <td
                           key={c.id}
                           title={cellTitle}
-                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : cellViolations ? "outline outline-1 -outline-offset-1 outline-[#ef4444] bg-[#ef4444]/10" : brokenFk ? "outline outline-1 -outline-offset-1 outline-[#f59e0b] bg-[#f59e0b]/10" : ""}`}
-                          onClick={(e) => handleCellClick(row.id, c.name, e)}
+                          className={`px-2.5 py-1.5 border-b border-[#2a2a2f] whitespace-nowrap overflow-hidden ${cellSelected ? "outline outline-1 -outline-offset-1 outline-[#7c3aed] bg-[#7c3aed]/10" : cellViolations ? "outline outline-1 -outline-offset-1 outline-[#ef4444] bg-[#ef4444]/10" : brokenFk ? "outline outline-1 -outline-offset-1 outline-[#f59e0b] bg-[#f59e0b]/10" : ""}`}
+                          onMouseDown={(e) => handleCellMouseDown(row.id, c.name, e)}
+                          onMouseEnter={() => handleCellMouseEnter(row.id, c.name)}
                           onDoubleClick={() => { setEditing({ rowId: row.id, col: c.name }); setEditVal(String(row.data[c.name] ?? "")); }}
                         >
                           {isEditing && c.type === "enum" ? (
@@ -908,7 +1184,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                   </tr>
                 ))}
                 {!searchQuery && (
-                  <tr className="hover:bg-[#1e1e24] cursor-pointer" onClick={addRow}>
+                  <tr className="hover:bg-[#1e1e24] cursor-pointer" onClick={() => { setAddRowCount(1); setShowAddRowModal(true); }}>
                     <td colSpan={visibleColumns.length + 2} className="px-2.5 py-2.5 text-center text-[11px] text-[#4a4a55] hover:text-[#6b6b77]">
                       <Plus size={11} className="inline -mt-px mr-1" />행 추가
                     </td>
@@ -1075,6 +1351,53 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         setAnnotationLoading={setAnnotationLoading}
         loadAnnotations={loadAnnotations}
       />
+
+      {showAddRowModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowAddRowModal(false)} />
+          <div className="relative bg-[#16161a] border border-[#2a2a2f] rounded-xl shadow-2xl p-5 w-64">
+            <div className="text-[12px] font-semibold text-[#ededed] mb-4">행 추가</div>
+            {/* 수량 입력 */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[11px] text-[#6b6b77] w-8 flex-shrink-0">수량</span>
+              <input
+                type="number"
+                min={1}
+                value={addRowCount}
+                onChange={(e) => setAddRowCount(Math.max(1, parseInt(e.target.value) || 1))}
+                className="flex-1 bg-[#0f0f10] border border-[#2a2a2f] rounded-lg px-3 py-1.5 text-[13px] text-[#ededed] outline-none focus:border-[#7c3aed]/50 text-center"
+              />
+            </div>
+            {/* 단위 버튼 */}
+            <div className="flex gap-1.5 mb-4">
+              {[-10, -5, -1, 1, 5, 10].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setAddRowCount((v) => Math.max(1, v + n))}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors border ${n < 0 ? "bg-[#1e1e24] hover:bg-[#2a2a2f] border-[#2a2a2f] text-[#9a9aa3]" : "bg-[#1e1b4b] hover:bg-[#2d1b69] border-[#3d2b8a] text-[#c4b5fd]"}`}
+                >
+                  {n > 0 ? `+${n}` : n}
+                </button>
+              ))}
+            </div>
+            {/* 확인/취소 */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddRowModal(false)}
+                className="flex-1 py-2 rounded-lg text-[12px] text-[#6b6b77] hover:text-[#9a9aa3] border border-[#2a2a2f] hover:border-[#3a3a42] transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => addRows(addRowCount)}
+                className="flex-1 py-2 rounded-lg text-[12px] font-medium bg-[#7c3aed] hover:bg-[#6d28d9] text-white transition-colors"
+              >
+                {addRowCount}개 추가
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SnapshotDiffModal
         open={showDiff}

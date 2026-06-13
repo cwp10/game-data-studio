@@ -4,13 +4,18 @@ export interface Row { id: string; data: Record<string, unknown>; }
 export interface GridColumn { name: string; type: "string" | "number" | "boolean" | "enum"; }
 
 export type CellCmd = { rowId: string; col: string; before: unknown; after: unknown };
-// 스택 엔트리 = 그룹(CellCmd[]). 단일 셀 편집 = 길이 1 그룹, paste = 길이 N 그룹.
-export type GridState = { rows: Row[]; undoStack: CellCmd[][]; redoStack: CellCmd[][] };
+// 행 삭제 undo용: 삭제 전 행 데이터와 rows 배열 내 위치를 보존.
+export type RowsDeleteCmd = { kind: "rows_delete"; rows: Row[]; indices: number[] };
+// 스택 엔트리 = CellCmd 그룹(셀 편집) 또는 RowsDeleteCmd(행 삭제).
+export type StackEntry = CellCmd[] | RowsDeleteCmd;
+
+export type GridState = { rows: Row[]; undoStack: StackEntry[]; redoStack: StackEntry[] };
 
 export type GridAction =
   | { type: "LOAD"; rows: Row[] }
   | { type: "APPEND"; row: Row }
   | { type: "DELETE_BY_IDS"; ids: string[] }
+  | { type: "DELETE_WITH_UNDO"; deletedRows: Row[]; deletedIndices: number[] }
   | { type: "UPDATE_CELL"; rowId: string; col: string; before: unknown; after: unknown }
   | { type: "BATCH_UPDATE"; cmds: CellCmd[] }
   | { type: "SET_ROWS"; rows: Row[] }
@@ -29,6 +34,16 @@ const applyGroup = (rows: Row[], group: CellCmd[], dir: "before" | "after"): Row
   return rows.map((r) => (byRow.has(r.id) ? { ...r, data: { ...r.data, ...byRow.get(r.id)! } } : r));
 };
 
+// 삭제된 행들을 원래 위치에 순서대로 삽입. indices 오름차순 정렬 후 splice.
+const insertRows = (rows: Row[], toInsert: { row: Row; index: number }[]): Row[] => {
+  const sorted = [...toInsert].sort((a, b) => a.index - b.index);
+  const result = [...rows];
+  for (let i = 0; i < sorted.length; i++) {
+    result.splice(Math.min(sorted[i].index, result.length), 0, sorted[i].row);
+  }
+  return result;
+};
+
 export function gridReducer(state: GridState, action: GridAction): GridState {
   switch (action.type) {
     case "LOAD":
@@ -40,6 +55,16 @@ export function gridReducer(state: GridState, action: GridAction): GridState {
     case "DELETE_BY_IDS": {
       const ids = new Set(action.ids);
       return { ...state, rows: state.rows.filter((r) => !ids.has(r.id)) };
+    }
+
+    case "DELETE_WITH_UNDO": {
+      const ids = new Set(action.deletedRows.map((r) => r.id));
+      const entry: RowsDeleteCmd = { kind: "rows_delete", rows: action.deletedRows, indices: action.deletedIndices };
+      return {
+        rows: state.rows.filter((r) => !ids.has(r.id)),
+        undoStack: [...state.undoStack, entry].slice(-UNDO_LIMIT),
+        redoStack: [],
+      };
     }
 
     case "UPDATE_CELL": {
@@ -64,21 +89,39 @@ export function gridReducer(state: GridState, action: GridAction): GridState {
       return { ...state, rows: action.rows };
 
     case "UNDO": {
-      const group = state.undoStack.at(-1);
-      if (!group) return state;
+      const entry = state.undoStack.at(-1);
+      if (!entry) return state;
+      if (!Array.isArray(entry)) {
+        // 행 삭제 undo: 원래 위치에 행 복구
+        const toInsert = entry.rows.map((row, i) => ({ row, index: entry.indices[i] }));
+        return {
+          rows: insertRows(state.rows, toInsert),
+          undoStack: state.undoStack.slice(0, -1),
+          redoStack: [...state.redoStack, entry],
+        };
+      }
       return {
-        rows: applyGroup(state.rows, group, "before"),
+        rows: applyGroup(state.rows, entry, "before"),
         undoStack: state.undoStack.slice(0, -1),
-        redoStack: [...state.redoStack, group],
+        redoStack: [...state.redoStack, entry],
       };
     }
 
     case "REDO": {
-      const group = state.redoStack.at(-1);
-      if (!group) return state;
+      const entry = state.redoStack.at(-1);
+      if (!entry) return state;
+      if (!Array.isArray(entry)) {
+        // 행 삭제 redo: 다시 삭제
+        const ids = new Set(entry.rows.map((r) => r.id));
+        return {
+          rows: state.rows.filter((r) => !ids.has(r.id)),
+          undoStack: [...state.undoStack, entry],
+          redoStack: state.redoStack.slice(0, -1),
+        };
+      }
       return {
-        rows: applyGroup(state.rows, group, "after"),
-        undoStack: [...state.undoStack, group],
+        rows: applyGroup(state.rows, entry, "after"),
+        undoStack: [...state.undoStack, entry],
         redoStack: state.redoStack.slice(0, -1),
       };
     }
@@ -92,11 +135,12 @@ export interface GridApi {
   rows: Row[];
   canUndo: boolean;
   canRedo: boolean;
-  undoTop: CellCmd[] | null;
-  redoTop: CellCmd[] | null;
+  undoTop: StackEntry | null;
+  redoTop: StackEntry | null;
   load(rows: Row[]): void;
   append(row: Row): void;
   deleteByIds(ids: string[]): void;
+  deleteWithUndo(deletedRows: Row[], deletedIndices: number[]): void;
   updateCell(rowId: string, col: string, before: unknown, after: unknown): void;
   batchUpdate(cmds: CellCmd[]): void;
   setRows(rows: Row[]): void;
@@ -115,6 +159,7 @@ export function useGridState(): GridApi {
     load: (rows) => dispatch({ type: "LOAD", rows }),
     append: (row) => dispatch({ type: "APPEND", row }),
     deleteByIds: (ids) => dispatch({ type: "DELETE_BY_IDS", ids }),
+    deleteWithUndo: (deletedRows, deletedIndices) => dispatch({ type: "DELETE_WITH_UNDO", deletedRows, deletedIndices }),
     updateCell: (rowId, col, before, after) => dispatch({ type: "UPDATE_CELL", rowId, col, before, after }),
     batchUpdate: (cmds) => dispatch({ type: "BATCH_UPDATE", cmds }),
     setRows: (rows) => dispatch({ type: "SET_ROWS", rows }),

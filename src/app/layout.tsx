@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DragGuard } from "./DragGuard";
 
 export const metadata: Metadata = {
   title: "Game Data Studio",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <DragGuard />
+        {children}
+      </body>
     </html>
   );
 }

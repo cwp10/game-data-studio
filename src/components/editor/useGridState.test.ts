@@ -52,8 +52,8 @@ describe("gridReducer", () => {
     }
     expect(s.undoStack).toHaveLength(50);
     // 가장 오래된 것이 버려졌으므로 top은 마지막 편집, bottom은 11번째 편집(before:10)
-    expect(s.undoStack[0][0].before).toBe(10);
-    expect(s.undoStack.at(-1)![0].after).toBe(60);
+    expect((s.undoStack[0] as import("./useGridState").CellCmd[])[0].before).toBe(10);
+    expect((s.undoStack.at(-1)! as import("./useGridState").CellCmd[])[0].after).toBe(60);
   });
 
   it("SET_ROWS(bulk)는 undoStack/redoStack 변화 없음", () => {
