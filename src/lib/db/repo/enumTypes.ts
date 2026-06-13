@@ -80,3 +80,38 @@ export function deleteEnumType(id: string): void {
   ensure();
   getDb().prepare("DELETE FROM enum_types WHERE id = ?").run(id);
 }
+
+export interface EnumUsage {
+  tableName: string;
+  columnName: string;
+  count: number; // enum 값 사용 행 수 (타입 전체 조회 시 0)
+}
+
+/** 특정 enum 값을 현재 사용 중인 행을 테이블·컬럼 단위로 집계 */
+export function checkEnumValueUsage(enumTypeId: string, value: string): EnumUsage[] {
+  ensure();
+  const db = getDb();
+  const cols = db.prepare(`
+    SELECT c.name AS col_name, t.name AS tbl_name, c.table_id
+    FROM columns c JOIN tables t ON t.id = c.table_id
+    WHERE c.enum_type_id = ?
+  `).all(enumTypeId) as { col_name: string; tbl_name: string; table_id: string }[];
+
+  return cols.flatMap((col) => {
+    const n = (db.prepare(
+      `SELECT COUNT(*) AS n FROM rows WHERE table_id = ? AND json_extract(data, '$.' || ?) = ?`
+    ).get(col.table_id, col.col_name, value) as { n: number }).n;
+    return n > 0 ? [{ tableName: col.tbl_name, columnName: col.col_name, count: n }] : [];
+  });
+}
+
+/** 이 enum 타입을 참조하는 컬럼 목록 (타입 전체 삭제 전 경고용) */
+export function checkEnumTypeUsage(enumTypeId: string): EnumUsage[] {
+  ensure();
+  const cols = getDb().prepare(`
+    SELECT c.name AS col_name, t.name AS tbl_name
+    FROM columns c JOIN tables t ON t.id = c.table_id
+    WHERE c.enum_type_id = ?
+  `).all(enumTypeId) as { col_name: string; tbl_name: string }[];
+  return cols.map((c) => ({ tableName: c.tbl_name, columnName: c.col_name, count: 0 }));
+}

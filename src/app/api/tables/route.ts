@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createTable, listTables } from "@/lib/db/repo/tables";
+import { createTable, deleteTable, listTables } from "@/lib/db/repo/tables";
 import { addColumn } from "@/lib/db/repo/columns";
 
 export async function GET(req: NextRequest) {
@@ -18,4 +18,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ table, columns: cols }, { status: 201 });
   }
   return NextResponse.json(table, { status: 201 });
+}
+
+export async function DELETE(req: NextRequest) {
+  const tableId = req.nextUrl.searchParams.get("table_id");
+  if (!tableId) return NextResponse.json({ error: "table_id required" }, { status: 400 });
+  deleteTable(tableId);
+  return NextResponse.json({ deleted: true });
 }

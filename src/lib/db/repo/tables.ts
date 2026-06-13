@@ -12,10 +12,12 @@ export interface Table {
   updated_at: number;
 }
 
-export function listTables(projectId: string): Table[] {
+export function listTables(projectId: string): (Table & { row_count: number })[] {
   return getDb()
-    .prepare("SELECT * FROM tables WHERE project_id = ? ORDER BY order_index, name")
-    .all(projectId) as Table[];
+    .prepare(`SELECT t.*, COUNT(r.id) as row_count
+              FROM tables t LEFT JOIN rows r ON r.table_id = t.id
+              WHERE t.project_id = ? GROUP BY t.id ORDER BY t.order_index, t.name`)
+    .all(projectId) as (Table & { row_count: number })[];
 }
 
 export function getTable(id: string): Table | undefined {

@@ -11,13 +11,14 @@ import { CurveModal, type CurveState } from "@/components/editor/CurveModal";
 import { AnnotationModal } from "@/components/editor/AnnotationModal";
 import { FormulaPreviewModal } from "@/components/editor/FormulaPreviewModal";
 import { TableFitModal } from "@/components/editor/TableFitModal";
+import { DeleteTableModal } from "@/components/editor/DeleteTableModal";
 import { SnapshotDiffModal, type DiffResultData } from "@/components/editor/SnapshotDiffModal";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd, type RowsDeleteCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
 
 const CHART_PALETTE = ["#7c3aed", "#4ade80", "#f59e0b", "#f87171", "#38bdf8", "#c4b5fd"];
 
-interface Table { id: string; name: string; }
+interface Table { id: string; name: string; row_count?: number; }
 interface Column { id: string; table_id?: string; name: string; type: "string" | "number" | "boolean" | "enum"; enum_type_id?: string | null; }
 interface Anomaly { row_id: string; label: string; value: number; z_score: number; severity: "danger" | "warn"; }
 interface BalanceResult { column: string; mean: number; stddev: number; anomalies: Anomaly[]; }
@@ -84,6 +85,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [addRowCount, setAddRowCount] = useState(1);
   const [formulaPreview, setFormulaPreview] = useState<{ name: string; type: string; base: number; factor: number } | null>(null);
   const [showTableFit, setShowTableFit] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Table | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -961,9 +963,23 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <div className="w-[170px] border-r border-[#2a2a2f] bg-[#16161a] flex flex-col flex-shrink-0">
           <PanelHeader>테이블</PanelHeader>
           <div className="overflow-auto flex-1">
-            {tables.map((t) => (
-              <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)}>{t.name}</PanelItem>
-            ))}
+            {tables.map((t) => {
+              const empty = t.row_count === 0;
+              return (
+                <PanelItem key={t.id} active={selectedId === t.id} onClick={() => setSelectedId(t.id)} className="group">
+                  <span className={`flex-1 truncate ${empty && selectedId !== t.id ? "text-[#ef4444]/70" : ""}`}>{t.name}</span>
+                  {empty && <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444] flex-shrink-0" title="행 없음" />}
+                  <button
+                    tabIndex={-1}
+                    title="테이블 삭제"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#ef4444]/20 hover:text-[#ef4444] text-[#3a3a42] transition-opacity flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </PanelItem>
+              );
+            })}
           </div>
         </div>
 
@@ -1390,6 +1406,22 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         columns={columns}
         projectId={projectId}
       />
+
+      {deleteTarget && (
+        <DeleteTableModal
+          open={true}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            await fetch(`/api/tables?table_id=${deleteTarget.id}`, { method: "DELETE" });
+            if (selectedId === deleteTarget.id) setSelectedId(null);
+            setDeleteTarget(null);
+            loadTables();
+          }}
+          table={deleteTarget}
+          projectId={projectId}
+          tables={tables}
+        />
+      )}
 
       {showAddRowModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
