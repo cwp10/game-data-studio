@@ -17,9 +17,10 @@ export interface StageDifficulty {
   powerRatio: number; // = unitPower(enemy) / unitPower(player)  (>1 = 적이 강함)
 }
 
-// 난이도 지표 (MVP 단순 합. hp가 지배적이라 체력 큰 적이 난이도↑ — 의미 부합).
+// 난이도 지표. extra 스탯도 전투력 지수에 합산 (extra가 없으면 기존 동작 유지).
 export function unitPower(u: Unit): number {
-  return u.hp + u.atk + u.def;
+  const extraSum = u.extra ? Object.values(u.extra).reduce((s, v) => s + v, 0) : 0;
+  return u.hp + u.atk + u.def + extraSum;
 }
 
 // 스테이지별 난이도 곡선. 각 stage i: runMonteCarlo([player], [enemy], iterations, seed+i).

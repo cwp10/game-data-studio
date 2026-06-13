@@ -19,7 +19,8 @@ export interface Unit {
   speed: number;     // 선공/턴 순서 결정
   critRate?: number; // 0~1, 미지정 시 0
   critMult?: number; // 기본 1.5
-  skills?: Skill[];  // optional → 후방호환 (없으면 스킬 코드/RNG 0 실행)
+  skills?: Skill[];  // optional → 후방호환
+  extra?: Record<string, number>; // 추가 스탯 (전투력 지수 반영, 데미지 공식 미사용)
 }
 
 export type Team = Unit[]; // 1명이면 1:1, 다수면 N:N

@@ -42,6 +42,7 @@ export function DifficultySimPanel({ tables }: { tables: Table[] }) {
   const [hpCol, setHpCol] = useState("");
   const [atkCol, setAtkCol] = useState("");
   const [defCol, setDefCol] = useState("");
+  const [spdCol, setSpdCol] = useState("");
   const [secondsPerTurn, setSecondsPerTurn] = useState(1);
   const [iterations, setIterations] = useState(500);
   const [seed, setSeed] = useState(0);
@@ -51,7 +52,7 @@ export function DifficultySimPanel({ tables }: { tables: Table[] }) {
 
   // stages 테이블 선택 → 컬럼/행 로드 + label/hp/atk/def 컬럼 추정
   useEffect(() => {
-    if (!tableId) { setRows([]); setCols([]); setLabelCol(""); setHpCol(""); setAtkCol(""); setDefCol(""); return; }
+    if (!tableId) { setRows([]); setCols([]); setLabelCol(""); setHpCol(""); setAtkCol(""); setDefCol(""); setSpdCol(""); return; }
     fetch(`/api/tables/${tableId}`).then((r) => r.json()).then((d) => {
       const c: Column[] = d.columns ?? [];
       setCols(c);
@@ -59,23 +60,31 @@ export function DifficultySimPanel({ tables }: { tables: Table[] }) {
       setHpCol(guessCol(c, ["enemy_hp", "boss_hp", "hp", "health"]));
       setAtkCol(guessCol(c, ["enemy_atk", "boss_atk", "atk", "attack", "power"]));
       setDefCol(guessCol(c, ["enemy_def", "boss_def", "def", "defense", "armor"]));
+      setSpdCol(guessCol(c, ["enemy_spd", "boss_spd", "spd", "speed"]));
     });
     fetch(`/api/rows?table_id=${tableId}`).then((r) => r.json()).then((d: RowWithData[]) => setRows(Array.isArray(d) ? d : []));
   }, [tableId]);
 
-  // 각 행 → StageInput (label=문자 컬럼 또는 id 폴백, enemy=추정 컬럼, def 미선택 시 0, speed 기본 100)
-  const stages: StageInput[] = useMemo(() =>
-    rows.map((r, i) => ({
-      label: String((labelCol ? r.data[labelCol] : null) ?? r.data.name ?? r.data.id ?? `스테이지 ${i + 1}`),
-      enemy: {
-        name: String((labelCol ? r.data[labelCol] : null) ?? r.data.name ?? "적"),
-        hp: num(r.data[hpCol]),
-        atk: num(r.data[atkCol]),
-        def: defCol ? num(r.data[defCol]) : 0,
-        speed: 100,
-      },
-    })),
-  [rows, labelCol, hpCol, atkCol, defCol]);
+  // 각 행 → StageInput. 핵심 4 컬럼 외 number 컬럼은 extra로 자동 수집
+  const stages: StageInput[] = useMemo(() => {
+    const coreSet = new Set([hpCol, atkCol, defCol, spdCol].filter(Boolean));
+    const extraNumCols = cols.filter((c) => c.type === "number" && !coreSet.has(c.name)).map((c) => c.name);
+    return rows.map((r, i) => {
+      const extra: Record<string, number> = {};
+      for (const col of extraNumCols) extra[col] = num(r.data[col]);
+      return {
+        label: String((labelCol ? r.data[labelCol] : null) ?? r.data.name ?? r.data.id ?? `스테이지 ${i + 1}`),
+        enemy: {
+          name: String((labelCol ? r.data[labelCol] : null) ?? r.data.name ?? "적"),
+          hp: num(r.data[hpCol]),
+          atk: num(r.data[atkCol]),
+          def: defCol ? num(r.data[defCol]) : 0,
+          speed: spdCol ? (num(r.data[spdCol]) || 100) : 100,
+          ...(extraNumCols.length > 0 ? { extra } : {}),
+        },
+      };
+    });
+  }, [rows, cols, labelCol, hpCol, atkCol, defCol, spdCol]);
 
   const run = async () => {
     setLoading(true);
@@ -120,7 +129,7 @@ export function DifficultySimPanel({ tables }: { tables: Table[] }) {
           </Select>
         </div>
         {cols.length > 0 && (
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <div>
               <div className="text-[11px] text-[#6b6b77] mb-1.5">라벨 컬럼</div>
               <Select value={labelCol} onChange={(e) => setLabelCol(e.target.value)}>
@@ -128,9 +137,14 @@ export function DifficultySimPanel({ tables }: { tables: Table[] }) {
                 {cols.filter((c) => c.type === "string").map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
               </Select>
             </div>
-            {([["적 HP", hpCol, setHpCol], ["적 ATK", atkCol, setAtkCol], ["적 DEF", defCol, setDefCol]] as const).map(([label, val, setter]) => (
+            {([
+              ["적 HP", hpCol, setHpCol, ""],
+              ["적 ATK", atkCol, setAtkCol, ""],
+              ["적 DEF", defCol, setDefCol, " (없으면 0)"],
+              ["적 속도", spdCol, setSpdCol, " (없으면 100)"],
+            ] as const).map(([label, val, setter, hint]) => (
               <div key={label}>
-                <div className="text-[11px] text-[#6b6b77] mb-1.5">{label}{label === "적 DEF" && <span className="text-[#4a4a55]"> (없으면 0)</span>}</div>
+                <div className="text-[11px] text-[#6b6b77] mb-1.5">{label}{hint && <span className="text-[#4a4a55]">{hint}</span>}</div>
                 <Select value={val} onChange={(e) => setter(e.target.value)}>
                   <option value="">—</option>
                   {cols.filter((c) => c.type === "number").map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
