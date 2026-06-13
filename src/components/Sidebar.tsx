@@ -14,7 +14,7 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
   { id: "memory",     Icon: NotebookText, label: "메모리" },
 ];
 
-export function Sidebar({ current, onChange, onHelp }: { current: Screen; onChange: (s: Screen) => void; onHelp?: () => void }) {
+export function Sidebar({ current, onChange, onHelp, onSettings }: { current: Screen; onChange: (s: Screen) => void; onHelp?: () => void; onSettings?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { if (localStorage.getItem("sidebar:collapsed") === "1") setCollapsed(true); }, []);
 
@@ -67,6 +67,7 @@ export function Sidebar({ current, onChange, onHelp }: { current: Screen; onChan
           </button>
         )}
         <button
+          onClick={onSettings}
           title={collapsed ? "설정" : undefined}
           className={`w-full flex items-center gap-3 ${collapsed ? "justify-center px-0" : "px-4"} py-3 text-left text-[#6b6b77] border-l-2 border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3] transition-colors`}
         >

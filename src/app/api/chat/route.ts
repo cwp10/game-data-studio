@@ -4,7 +4,7 @@ import { listColumns } from "@/lib/db/repo/columns";
 import { getProject } from "@/lib/db/repo/projects";
 import { readProjectMemory } from "@/lib/memory/projectMemory";
 import { addMessage, listMessages, clearMessages } from "@/lib/db/repo/chat";
-import { spawnClaude } from "@/lib/util/claude";
+import { spawnAI } from "@/lib/util/ai";
 import { MCP_TOOL_PREFIX, mcpTool } from "@/lib/mcp/constants";
 
 // 프로젝트 대화 이력 로드
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
       // detached: 자식(claude)이 spawn한 MCP 서버까지 프로세스 그룹째 종료할 수 있게 한다.
       // 프롬프트는 stdin 으로 전달 (인자 이스케이프 회피).
-      const child = spawnClaude(args, { input: message, detached: true });
+      const child = spawnAI(args, { input: message, detached: true });
 
       // 영속화용: 어시스턴트 텍스트 + 툴 호출을 순서대로 수집
       const transcript: { role: "assistant" | "tool"; content: string; tool_name?: string }[] = [];

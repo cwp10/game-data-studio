@@ -10,6 +10,7 @@ import { MemoryView } from "@/components/memory/MemoryView";
 import { TypeRegistry } from "@/components/types/TypeRegistry";
 import { EconomySim } from "@/components/economy/EconomySim";
 import { HelpModal } from "@/components/ui/HelpModal";
+import { SettingsModal } from "@/components/ui/SettingsModal";
 
 export type Screen = "home" | "schema" | "editor" | "balance" | "simulation" | "memory" | "types" | "economy";
 
@@ -18,6 +19,7 @@ export default function App() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const navigate = (s: Screen, pid?: string, pname?: string) => {
     if (pid) setProjectId(pid);
@@ -38,7 +40,7 @@ export default function App() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar current={screen} onChange={(s) => setScreen(s)} onHelp={() => setHelpOpen(true)} />
+        <Sidebar current={screen} onChange={(s) => setScreen(s)} onHelp={() => setHelpOpen(true)} onSettings={() => setSettingsOpen(true)} />
 
         <div className="flex flex-1 overflow-hidden">
           {screen === "home" && <ProjectHome onNavigate={navigate} />}
@@ -73,6 +75,7 @@ export default function App() {
       </div>
 
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} initialScreen={screen} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

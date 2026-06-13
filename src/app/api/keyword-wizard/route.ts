@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawnClaude } from "@/lib/util/claude";
+import { spawnAI } from "@/lib/util/ai";
 import { assembleOverlays } from "@/lib/game-patterns/modules";
 import { GENRES } from "@/lib/genre-seeds";
 
@@ -13,7 +13,7 @@ function runClaude(prompt: string, system: string): Promise<string> {
     // 마법사는 단순 데이터 생성이라 빠르고 저렴한 모델로 충분 (WIZARD_MODEL 로 override)
     const model = process.env.WIZARD_MODEL ?? "sonnet";
     // MCP/툴 없이 순수 텍스트 생성만 (strict-mcp-config 로 외부 MCP 서버 미로드)
-    const child = spawnClaude(
+    const child = spawnAI(
       ["-p", "--output-format", "json", "--strict-mcp-config", "--model", model, "--append-system-prompt", system],
       { input: prompt },
     );
