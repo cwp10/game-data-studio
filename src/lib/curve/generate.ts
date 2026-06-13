@@ -13,24 +13,44 @@ export interface CurveParams {
   midpoint?: number; // 변곡점 레벨 (이 레벨에서 value = base + range/2)
 }
 
+// count에 의존하지 않는 단일 레벨 계산. s_curve는 모든 파라미터가 사전 확정되어야 함.
+export interface ComputeAtOptions {
+  type: CurveType;
+  base: number;
+  factor: number;
+  round?: boolean;
+  range?: number;
+  rate?: number;
+  midpoint?: number; // s_curve 사용 시 필수 (count 기반 기본값 없음)
+}
+
+export function computeAt(opts: ComputeAtOptions, level: number): number {
+  const { type, base, factor } = opts;
+  let v: number;
+  if (type === "linear") v = base + factor * (level - 1);
+  else if (type === "power") v = base * Math.pow(level, factor);
+  else if (type === "logarithmic") v = base + factor * Math.log(level);
+  else if (type === "quadratic") v = base + factor * (level - 1) ** 2;
+  else if (type === "s_curve") {
+    const range = opts.range ?? 100;
+    const rate = opts.rate ?? 0.5;
+    const midpoint = opts.midpoint ?? 50; // eval_formula 경로: midpoint 명시 필수
+    v = base + range / (1 + Math.exp(-rate * (level - midpoint)));
+  } else v = base * Math.pow(factor, level - 1); // exponential
+  return opts.round === false ? v : Math.round(v);
+}
+
 export function computeCurve(p: CurveParams): number[] {
   const count = Math.max(0, Math.min(p.count, 10000));
+  // s_curve의 midpoint 기본값은 count 기반으로 여기서 확정
+  const opts: ComputeAtOptions = {
+    type: p.type, base: p.base, factor: p.factor, round: p.round,
+    range: p.range, rate: p.rate,
+    midpoint: p.type === "s_curve" ? (p.midpoint ?? count / 2) : p.midpoint,
+  };
   const out: number[] = [];
   for (let level = 1; level <= count; level++) {
-    let v: number;
-    if (p.type === "linear") v = p.base + p.factor * (level - 1);
-    else if (p.type === "power") v = p.base * Math.pow(level, p.factor);
-    else if (p.type === "logarithmic") v = p.base + p.factor * Math.log(level); // level=1 → ln1=0 → base
-    else if (p.type === "quadratic") v = p.base + p.factor * (level - 1) ** 2; // level=1 → base
-    else if (p.type === "s_curve") {
-      // 로지스틱: base + range / (1 + exp(-rate*(level-midpoint)))
-      // ★base는 하한 점근선 — level=1 값이 아님 (다른 5종과 의미 다름)
-      const range = p.range ?? 100;
-      const rate = p.rate ?? 0.5;
-      const midpoint = p.midpoint ?? p.count / 2;
-      v = p.base + range / (1 + Math.exp(-rate * (level - midpoint)));
-    } else v = p.base * Math.pow(p.factor, level - 1); // exponential
-    out.push(p.round === false ? v : Math.round(v));
+    out.push(computeAt(opts, level));
   }
   return out;
 }

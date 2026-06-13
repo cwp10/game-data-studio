@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCurve } from "./generate";
+import { computeCurve, computeAt } from "./generate";
 
 describe("computeCurve", () => {
   it("linear: base + factor*(L-1)", () => {
@@ -52,5 +52,23 @@ describe("computeCurve", () => {
     expect(series[4]).toBeCloseTo(50, 5);
     expect(series[9]).toBeGreaterThan(50); // 상한 방향 단조 증가
     expect(series[0]).toBeLessThan(50);    // 하한 방향
+  });
+});
+
+describe("computeAt", () => {
+  it("power: L=100000 — count cap 없이 계산", () => {
+    const v = computeAt({ type: "power", base: 100, factor: 1.5 }, 100000);
+    expect(v).toBe(Math.round(100 * Math.pow(100000, 1.5)));
+  });
+
+  it("linear: computeAt 결과가 computeCurve 배열과 일치", () => {
+    const fromCurve = computeCurve({ type: "linear", base: 100, factor: 50, count: 5 });
+    // computeCurve는 10000 cap이 있으므로 범위 안에서 비교
+    expect(computeAt({ type: "linear", base: 100, factor: 50 }, 5)).toBe(fromCurve[4]);
+  });
+
+  it("s_curve: midpoint 명시 필수 — count 독립적", () => {
+    const v = computeAt({ type: "s_curve", base: 0, factor: 0, range: 100, rate: 1, midpoint: 50 }, 50);
+    expect(v).toBeCloseTo(50, 0); // 변곡점에서 base + range/2
   });
 });

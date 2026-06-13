@@ -47,7 +47,8 @@ export const SEED_TEMPLATES: Record<string, SeedTable[]> = {
   idle_rpg: [
     { name: "heroes", columns: [
       { name: "name", type: "string" }, { name: "class", type: "string" }, { name: "base_dps", type: "number" },
-      { name: "unlock_level", type: "number" }, { name: "upgrade_cost_gold", type: "number" }, { name: "growth_type", type: "string" },
+      { name: "unlock_level", type: "number" }, { name: "upgrade_cost_gold", type: "number" },
+      { name: "growth_type", type: "string" }, { name: "growth_base", type: "number" }, { name: "growth_factor", type: "number" },
     ] },
     { name: "hero_levels", columns: [
       { name: "hero_id", type: "string" }, { name: "level", type: "number" },

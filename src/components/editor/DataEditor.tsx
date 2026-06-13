@@ -9,6 +9,7 @@ import { solveCurve } from "@/lib/curve/solve";
 import { fitCurve } from "@/lib/curve/fit";
 import { CurveModal, type CurveState } from "@/components/editor/CurveModal";
 import { AnnotationModal } from "@/components/editor/AnnotationModal";
+import { FormulaPreviewModal } from "@/components/editor/FormulaPreviewModal";
 import { SnapshotDiffModal, type DiffResultData } from "@/components/editor/SnapshotDiffModal";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd, type RowsDeleteCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
@@ -80,6 +81,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [showAddRowModal, setShowAddRowModal] = useState(false);
   const [addRowCount, setAddRowCount] = useState(1);
+  const [formulaPreview, setFormulaPreview] = useState<{ name: string; type: string; base: number; factor: number } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -679,6 +681,11 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   useEffect(() => () => { if (balanceTimer.current) clearTimeout(balanceTimer.current); }, []);
 
   // 이상값을 (rowId:col) 키로 인덱싱해 셀 렌더링 시 O(1) 조회 (기존엔 셀마다 balance 전체 스캔).
+  const hasFormulaColumns = useMemo(() => {
+    const names = new Set(columns.map((c) => c.name));
+    return names.has("growth_type") && names.has("growth_base") && names.has("growth_factor");
+  }, [columns]);
+
   const anomalyMap = useMemo(() => {
     const m = new Map<string, Anomaly>();
     for (const b of balance) for (const a of b.anomalies) m.set(`${a.row_id}:${b.column}`, a);
@@ -1080,7 +1087,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                       </th>
                     );
                   })}
-                  <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] w-7" />
+                  <th className={`px-1.5 py-1.5 border-b border-[#2a2a2f] ${hasFormulaColumns ? "w-14" : "w-7"}`} />
                 </tr>
               </thead>
               <tbody>
@@ -1169,7 +1176,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                     {(() => {
                       const hasNote = (annotationsByRow.get(row.id) ?? []).length > 0;
                       return (
-                        <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-center w-7">
+                        <td className={`px-1.5 py-1.5 border-b border-[#2a2a2f] text-center ${hasFormulaColumns ? "w-14" : "w-7"}`}>
                           <button
                             tabIndex={-1}
                             onClick={(e) => { e.stopPropagation(); setAnnotationTarget({ rowId: row.id }); setNoteInput(""); }}
@@ -1178,6 +1185,16 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                           >
                             <StickyNote size={12} />
                           </button>
+                          {hasFormulaColumns && (
+                            <button
+                              tabIndex={-1}
+                              onClick={(e) => { e.stopPropagation(); setFormulaPreview({ name: String(row.data["name"] ?? row.id), type: String(row.data["growth_type"] ?? "power"), base: Number(row.data["growth_base"] ?? 0), factor: Number(row.data["growth_factor"] ?? 1) }); }}
+                              className="p-1 rounded hover:bg-[#2a2a2f] transition-colors text-[#7c3aed]/60 hover:text-[#7c3aed]"
+                              title="공식 미리보기"
+                            >
+                              <TrendingUp size={12} />
+                            </button>
+                          )}
                         </td>
                       );
                     })()}
@@ -1351,6 +1368,17 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         setAnnotationLoading={setAnnotationLoading}
         loadAnnotations={loadAnnotations}
       />
+
+      {formulaPreview && (
+        <FormulaPreviewModal
+          open={true}
+          onClose={() => setFormulaPreview(null)}
+          heroName={formulaPreview.name}
+          type={formulaPreview.type}
+          base={formulaPreview.base}
+          factor={formulaPreview.factor}
+        />
+      )}
 
       {showAddRowModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
