@@ -61,6 +61,25 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
     }
   };
 
+  const createEmpty = async () => {
+    if (!name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const p = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() }),
+      }).then((r) => r.json());
+      if (p?.id) onCreated(p.id, p.name);
+      else setError("생성에 실패했습니다.");
+    } catch {
+      setError("생성에 실패했습니다.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const create = async () => {
     if (!name.trim() || !proposal) return;
     setCreating(true);
@@ -327,6 +346,12 @@ export function ProjectWizard({ onClose, onCreated }: { onClose: () => void; onC
         {/* 하단 네비게이션 */}
         <div className="px-5 py-3 border-t border-[#2a2a2f] flex items-center justify-between flex-shrink-0">
           <div>
+            {step === 0 && (
+              <Btn disabled={!name.trim() || creating} onClick={createEmpty}>
+                {creating ? <Loader2 size={11} className="animate-spin" /> : null}
+                빈 테이블로 바로 시작
+              </Btn>
+            )}
             {step === 1 && (
               <Btn onClick={() => setStep(0)}>
                 <ChevronLeft size={11} />뒤로

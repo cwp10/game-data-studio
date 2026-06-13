@@ -99,7 +99,7 @@ export function SimulationView({ projectId }: { projectId: string }) {
           {mode === "stat" && <StatCalcPanel tables={tables} />}
           {mode === "combat" && <CombatSimPanel tables={tables} />}
           {mode === "gacha" && <GachaSimPanel tables={tables} />}
-          {mode === "dps" && <DpsSimPanel />}
+          {mode === "dps" && <DpsSimPanel tables={tables} />}
           {mode === "difficulty" && <DifficultySimPanel tables={tables} />}
           {mode === "pacing" && <PacingSimPanel tables={tables} />}
         </div>

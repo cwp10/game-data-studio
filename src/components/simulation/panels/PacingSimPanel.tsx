@@ -5,6 +5,9 @@ import { Btn, SectionLabel, Input, Select } from "@/components/ui";
 import { LineChart } from "@/components/chart/LineChart";
 import { CHART_PALETTE, Column, RowWithData, Table, guessCol, num } from "./types";
 
+const CURVE_TYPES = ["linear", "power", "exponential"] as const;
+type CurveType = typeof CURVE_TYPES[number];
+
 // ════════════════════════════════════════════════════════════════════
 // F-1 진척도 페이싱 시뮬레이터 (pacing API)
 // 플레이어 곡선 + 스테이지 목록 → /api/simulation {action:"pacing"} → PacingResult
@@ -46,6 +49,7 @@ export function PacingSimPanel({ tables }: { tables: Table[] }) {
   const [goldPerStage, setGoldPerStage] = useState(100);
 
   // 플레이어 곡선
+  const [curveType, setCurveType] = useState<CurveType>("linear");
   const [hpBase, setHpBase] = useState(1000);
   const [hpFactor, setHpFactor] = useState(200);
   const [atkBase, setAtkBase] = useState(200);
@@ -109,10 +113,10 @@ export function PacingSimPanel({ tables }: { tables: Table[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "pacing",
-          hpCurve: { type: "linear", base: hpBase, factor: hpFactor, count: 100 },
-          atkCurve: { type: "linear", base: atkBase, factor: atkFactor, count: 100 },
-          expCurve: { type: "linear", base: expBase, factor: expFactor, count: 100 },
-          upgradeCostCurve: { type: "linear", base: costBase, factor: costFactor, count: 100 },
+          hpCurve: { type: curveType, base: hpBase, factor: hpFactor, count: 100 },
+          atkCurve: { type: curveType, base: atkBase, factor: atkFactor, count: 100 },
+          expCurve: { type: curveType, base: expBase, factor: expFactor, count: 100 },
+          upgradeCostCurve: { type: curveType, base: costBase, factor: costFactor, count: 100 },
           stages,
           expPerStage,
           goldPerStage,
@@ -164,8 +168,22 @@ export function PacingSimPanel({ tables }: { tables: Table[] }) {
         </div>
       </div>
 
-      <SectionLabel>플레이어 성장 곡선 (linear)</SectionLabel>
+      <SectionLabel>플레이어 성장 곡선</SectionLabel>
       <div className="bg-[#16161a] border border-[#2a2a2f] rounded-xl p-4 mb-4">
+        <div className="mb-3">
+          <div className="text-[11px] text-[#6b6b77] mb-1.5">곡선 타입 (HP·ATK·exp·승급골드 공통)</div>
+          <div className="flex gap-1.5">
+            {CURVE_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setCurveType(t)}
+                className={`text-[11px] px-3 py-1 rounded-md border transition-colors ${curveType === t ? "bg-[#1e1b4b] border-[#7c3aed] text-[#c4b5fd]" : "bg-[#0f0f10] border-[#3a3a42] text-[#6b6b77] hover:border-[#7c3aed]/50"}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-4 gap-3">
           {([
             ["HP base", hpBase, setHpBase], ["HP factor", hpFactor, setHpFactor],
