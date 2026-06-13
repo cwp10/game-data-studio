@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2, StickyNote, GitCompare, Plus } from "lucide-react";
+import { Upload, Download, Sparkles, Trash2, MessageSquare, BarChart3, TrendingUp, ChevronDown, ChevronUp, Eye, EyeOff, Save, Undo2, Redo2, StickyNote, GitCompare, Plus, Wand2 } from "lucide-react";
 import { Btn, GradeBadge, PanelHeader, PanelItem, BottomTab, Tooltip } from "@/components/ui";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { LineChart } from "@/components/chart/LineChart";
@@ -10,6 +10,7 @@ import { fitCurve } from "@/lib/curve/fit";
 import { CurveModal, type CurveState } from "@/components/editor/CurveModal";
 import { AnnotationModal } from "@/components/editor/AnnotationModal";
 import { FormulaPreviewModal } from "@/components/editor/FormulaPreviewModal";
+import { TableFitModal } from "@/components/editor/TableFitModal";
 import { SnapshotDiffModal, type DiffResultData } from "@/components/editor/SnapshotDiffModal";
 import { useGridState, coerce, cellsToTSV, tsvToCommands, type Row, type CellCmd, type RowsDeleteCmd } from "@/components/editor/useGridState";
 import { type Screen } from "@/app/page";
@@ -82,6 +83,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   const [showAddRowModal, setShowAddRowModal] = useState(false);
   const [addRowCount, setAddRowCount] = useState(1);
   const [formulaPreview, setFormulaPreview] = useState<{ name: string; type: string; base: number; factor: number } | null>(null);
+  const [showTableFit, setShowTableFit] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -1006,6 +1008,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             )}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
             <Tooltip label="성장 곡선 생성"><Btn tabIndex={-1} disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn></Tooltip>
+            <Tooltip label="테이블 → 공식 변환"><Btn tabIndex={-1} disabled={!selectedId || rows.length < 2} onClick={() => setShowTableFit(true)}><Wand2 size={11} /></Btn></Tooltip>
             <Tooltip label="AI 밸런스 분석"><Btn tabIndex={-1} onClick={runBalance}><Sparkles size={11} /></Btn></Tooltip>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
@@ -1379,6 +1382,14 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
           factor={formulaPreview.factor}
         />
       )}
+
+      <TableFitModal
+        open={showTableFit}
+        onClose={() => setShowTableFit(false)}
+        rows={rows}
+        columns={columns}
+        projectId={projectId}
+      />
 
       {showAddRowModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

@@ -4,6 +4,7 @@ import { generateCurveIntoTable } from "../../curve/apply.js";
 import { computeAt } from "../../curve/generate.js";
 import { solveCurve } from "../../curve/solve.js";
 import { fitCurve } from "../../curve/fit.js";
+import { readRows } from "../../db/repo/rows.js";
 import { ok } from "./respond.js";
 
 export function registerCurveHandlers(server: McpServer) {
@@ -49,6 +50,61 @@ export function registerCurveHandlers(server: McpServer) {
       type: z.enum(["linear", "power", "exponential", "logarithmic", "quadratic", "s_curve"]),
     },
     async ({ points, type }) => ok(fitCurve(points, type))
+  );
+
+  server.tool(
+    "fit_from_table",
+    "기존 레벨 테이블의 행 데이터를 읽어 곡선 파라미터를 자동 역산. 무한 레벨 공식으로 전환할 때 사용. filter_column/filter_value로 특정 그룹(예: 영웅 ID)만 대상 지정 가능. 반환: { base, factor, r2, rowCount, maxErrorPct, meanErrorPct, preview[{level,original,fitted,diffPct}] }",
+    {
+      table_id: z.string(),
+      level_column: z.string(),
+      value_column: z.string(),
+      type: z.enum(["linear", "power", "exponential", "logarithmic", "quadratic", "s_curve"]),
+      filter_column: z.string().optional(),
+      filter_value: z.string().optional(),
+    },
+    async ({ table_id, level_column, value_column, type, filter_column, filter_value }) => {
+      const allRows = readRows(table_id, { limit: 5000 });
+      const rows = (filter_column && filter_value)
+        ? allRows.filter((r) => String(r.data[filter_column] ?? "") === filter_value)
+        : allRows;
+
+      const points = rows
+        .map((r) => ({ level: Number(r.data[level_column]), value: Number(r.data[value_column]) }))
+        .filter((p) => isFinite(p.level) && isFinite(p.value) && p.level > 0);
+
+      if (points.length < 2) {
+        throw new Error(`유효한 (level, value) 쌍이 부족합니다 (${points.length}개). 컬럼명을 확인하세요.`);
+      }
+
+      const fit = fitCurve(points, type);
+      const opts = { type, base: fit.base, factor: fit.factor, range: fit.range, rate: fit.rate, midpoint: fit.midpoint };
+
+      const errors = points.map((p) => {
+        const fitted = computeAt(opts, p.level);
+        return p.value !== 0 ? Math.abs(fitted - p.value) / Math.abs(p.value) * 100 : 0;
+      });
+
+      // 12개 샘플 균등 추출
+      const sorted = [...points].sort((a, b) => a.level - b.level);
+      const step = Math.max(1, Math.floor(sorted.length / 12));
+      const preview = sorted.filter((_, i) => i % step === 0).slice(0, 12).map((p) => {
+        const fitted = computeAt(opts, p.level);
+        const diffPct = p.value !== 0 ? Math.round(Math.abs(fitted - p.value) / Math.abs(p.value) * 1000) / 10 : 0;
+        return { level: p.level, original: p.value, fitted, diffPct };
+      });
+
+      return ok({
+        base: Math.round(fit.base * 1000) / 1000,
+        factor: Math.round((fit.factor) * 1000) / 1000,
+        ...(fit.range !== undefined ? { range: fit.range, rate: fit.rate, midpoint: fit.midpoint } : {}),
+        r2: Math.round(fit.r2 * 10000) / 10000,
+        rowCount: points.length,
+        maxErrorPct: Math.round(Math.max(...errors) * 10) / 10,
+        meanErrorPct: Math.round((errors.reduce((a, b) => a + b, 0) / errors.length) * 10) / 10,
+        preview,
+      });
+    }
   );
 
   server.tool(

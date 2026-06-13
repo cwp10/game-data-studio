@@ -5,7 +5,7 @@ import {
   X, Lightbulb, ChevronRight,
   Plus, Upload, Download, Save, Undo2, Redo2, TrendingUp, Sparkles,
   GitCompare, Link2, Pencil, Trash2, MessageSquare, Eye, StickyNote,
-  RotateCcw, Copy, BarChart3, Zap,
+  RotateCcw, Copy, BarChart3, Zap, Wand2, CheckCircle2, AlertTriangle, XCircle,
 } from "lucide-react";
 import { type Screen } from "@/app/page";
 
@@ -219,6 +219,196 @@ function SchemaContent() {
   );
 }
 
+// 데이터 화면 안의 "테이블 → 공식 변환" 기능 전용 콘텐츠.
+// 무한 레벨 공식(성장 곡선)으로 전환하는 흐름을 기획자 언어로 설명한다.
+function TableToFormulaContent() {
+  return (
+    <>
+      <div className="rounded-lg bg-[#7c3aed]/8 border border-[#7c3aed]/25 px-3.5 py-3 mb-5">
+        <div className="flex items-center gap-2 mb-1.5">
+          <Wand2 size={13} className="text-[#a78bfa]" />
+          <span className="text-[12px] font-semibold text-[#ededed]">테이블 → 공식 변환</span>
+        </div>
+        <div className="text-[11px] text-[#9a9aa3] leading-relaxed">
+          레벨별 수치를 행으로 일일이 입력한 테이블(예: 1,000행짜리 레벨표)을, 레벨이 아무리 높아도
+          공식 하나로 값을 계산하는 <strong className="text-[#ededed]">무한 레벨 공식</strong>으로 바꿔주는 기능입니다.
+          기존 데이터에서 곡선 모양을 자동으로 찾아 <span className="font-mono text-[#c4b5fd]">growth_type · growth_base · growth_factor</span> 세 값으로 정리합니다.
+        </div>
+      </div>
+
+      <ToolbarRow
+        title="두 개의 진입점"
+        items={[
+          { icon: TrendingUp, label: "공식 미리보기", desc: "각 행 우측의 ↗ 아이콘. 그 행에 입력된 공식이 레벨별로 어떤 수치를 만드는지 즉시 확인합니다." },
+          { icon: Wand2, label: "테이블 → 공식 변환", desc: "툴바의 ✦ 버튼. 기존 레벨 데이터에서 공식 파라미터를 자동으로 역산합니다." },
+        ]}
+      />
+      <Divider />
+
+      <SectionLabel>① 행 단위 공식 미리보기 (↗)</SectionLabel>
+      <StepList
+        items={[
+          {
+            label: <>테이블에 <span className="font-mono text-[#c4b5fd]">growth_type</span> · <span className="font-mono text-[#c4b5fd]">growth_base</span> · <span className="font-mono text-[#c4b5fd]">growth_factor</span> 세 컬럼이 모두 있을 때, 각 행 우측에 <IBtn icon={TrendingUp} /> 아이콘이 나타납니다.</>,
+            sub: "세 컬럼 중 하나라도 없으면 아이콘이 보이지 않습니다. 방치형 RPG 위자드로 만든 heroes 테이블에는 기본 포함됩니다.",
+          },
+          {
+            label: <><IBtn icon={TrendingUp} /> 를 클릭하면 그 행의 공식으로 <strong className="text-[#ededed]">Lv 1 · 10 · 100 · 1,000 · 10,000 · 100,000</strong> 의 수치를 한 번에 보여줍니다.</>,
+            sub: "표 + 막대그래프로 성장 분포를 함께 확인합니다. 파라미터를 바꾸고 다시 눌러 감을 잡으세요.",
+          },
+          {
+            label: <>수치가 <span className="text-[#f87171] font-semibold">∞</span> 로 표시되면 극고레벨에서 값이 폭발(오버플로우)했다는 뜻입니다.</>,
+            sub: "exponential 곡선에서 자주 발생합니다. power 또는 logarithmic 으로 바꾸라는 경고가 함께 표시됩니다.",
+          },
+        ]}
+      />
+      <Divider />
+
+      <SectionLabel>② ✦ 버튼으로 기존 테이블을 공식으로 변환</SectionLabel>
+      <FlowDiagram
+        items={[
+          { icon: Wand2, label: "✦ 버튼", desc: "툴바 (행 2개 이상)" },
+          { label: "컬럼 선택", desc: "레벨·수치·곡선" },
+          { label: "피팅 결과", desc: "R²·오차 확인" },
+          { icon: CheckCircle2, label: "일괄 적용", desc: "엔티티 테이블에 저장" },
+        ]}
+      />
+      <div className="text-[10px] text-[#6b6b77] -mt-3 mb-4 leading-relaxed">
+        ✦ 버튼은 현재 테이블에 <strong className="text-[#9a9aa3]">행이 2개 이상</strong> 있을 때만 활성화됩니다. 곡선을 맞추려면 최소 두 점이 필요하기 때문입니다.
+      </div>
+      <StepList
+        title="변환 모달 사용법"
+        items={[
+          {
+            label: <><strong className="text-[#ededed]">컬럼 선택</strong> — 레벨 컬럼(예: level), 수치 컬럼(예: dps), 곡선 타입을 고릅니다.</>,
+          },
+          {
+            label: <><strong className="text-[#ededed]">그룹 컬럼</strong> (선택) — 영웅 ID처럼 엔티티를 구분하는 컬럼을 고르면, 그룹별로 따로 공식을 찾습니다.</>,
+            sub: "예: hero_id 를 고르면 \"5개 그룹 감지\"처럼 표시되고, 영웅마다 개별 공식이 산출됩니다.",
+          },
+          {
+            label: <><strong className="text-[#ededed]">피팅 결과</strong> — R²(적합도), 최대·평균 오차%, 그리고 파라미터 JSON을 보여줍니다. <IBtn icon={Copy} label="복사" /> 로 복사할 수 있습니다.</>,
+          },
+          {
+            label: <><strong className="text-[#ededed]">원본 vs 공식 비교표</strong> — 여러 레벨에서 원본값 / 공식값 / 오차%를 나란히 비교해 차이를 눈으로 확인합니다.</>,
+          },
+        ]}
+      />
+      <Divider />
+
+      <SectionLabel>곡선 6종 — 어떤 성장 모양인가</SectionLabel>
+      <div className="flex flex-col gap-1.5 mb-5">
+        {[
+          { name: "power", desc: "레벨^지수 형태. 방치형 게임에서 가장 흔합니다. \"레벨이 2배 되면 수치는 N배\"." },
+          { name: "exponential", desc: "매 레벨마다 일정 배율로 곱셈. 극고레벨에서 ∞로 폭발하므로 단독 사용은 주의하세요." },
+          { name: "linear", desc: "매 레벨마다 일정량 증가. 초반 튜토리얼 구간에 적합합니다." },
+          { name: "quadratic", desc: "이차함수. 중반부터 급격히 올라가는 느낌입니다." },
+          { name: "logarithmic", desc: "초반엔 빠르고 고레벨로 갈수록 완만. 스킬 레벨 같은 작은 보너스에 적합합니다." },
+          { name: "s_curve", desc: "초반 완만 → 중반 급성장 → 후반 다시 완만. 스테이지 난이도 등에 사용합니다." },
+        ].map(({ name, desc }) => (
+          <div key={name} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-[#16161e] border border-[#2a2a3a]">
+            <span className="px-1.5 py-0.5 rounded bg-[#2a2a3a] border border-[#3a3a4a] text-[10px] text-[#a78bfa] font-mono whitespace-nowrap flex-shrink-0">{name}</span>
+            <span className="text-[11px] text-[#6b6b77] leading-relaxed">{desc}</span>
+          </div>
+        ))}
+      </div>
+      <div className="text-[10px] text-[#6b6b77] -mt-2 mb-5 leading-relaxed">
+        곡선 6종은 모두 ✦ 변환 모달에서 고를 수 있습니다. 행 단위 ↗ 미리보기는 그 행에 적힌 공식을 그대로 그려보는 용도이므로,
+        s_curve처럼 추가 값(중간점 등)이 필요한 곡선은 ✦ 모달에서 확인하는 것이 정확합니다.
+      </div>
+      <Divider />
+
+      <SectionLabel>R² (적합도) 읽는 법</SectionLabel>
+      <div className="flex flex-col gap-1.5 mb-5">
+        {[
+          { badge: "우수", cls: "bg-[#4ade80]/10 text-[#4ade80] border-[#4ade80]/30", range: "0.99 이상", desc: "공식이 기존 데이터를 거의 완벽히 재현합니다. 안심하고 전환하세요." },
+          { badge: "양호", cls: "bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/30", range: "0.95 ~ 0.99", desc: "약간 오차는 있지만 실용적으로 사용할 수 있습니다." },
+          { badge: "불량", cls: "bg-[#f87171]/10 text-[#f87171] border-[#f87171]/30", range: "0.95 미만", desc: "다른 곡선 타입을 시도하세요. 데이터가 곡선 형태가 아닐 수 있습니다." },
+        ].map(({ badge, cls, range, desc }) => (
+          <div key={badge} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-[#16161e] border border-[#2a2a3a]">
+            <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${cls}`}>{badge}</span>
+            <span className="text-[10px] font-mono text-[#9a9aa3] whitespace-nowrap flex-shrink-0 mt-0.5">{range}</span>
+            <span className="text-[11px] text-[#6b6b77] leading-relaxed">{desc}</span>
+          </div>
+        ))}
+      </div>
+      <div className="text-[10px] text-[#6b6b77] -mt-2 mb-5 leading-relaxed">
+        오차% 색상도 같은 식으로 읽습니다 — 초록(5% 미만) / 노랑(15% 미만) / 빨강(그 이상).
+      </div>
+      <Divider />
+
+      <SectionLabel>그룹별 일괄 적용</SectionLabel>
+      <StepList
+        items={[
+          {
+            label: <>그룹 컬럼을 선택하면 <strong className="text-[#ededed]">일괄 적용</strong> 영역이 나타납니다. (그룹이 1개 이상 감지될 때)</>,
+          },
+          {
+            label: <><strong className="text-[#ededed]">적용할 테이블</strong> — 공식을 저장할 부모 엔티티 테이블을 고릅니다. (예: heroes)</>,
+          },
+          {
+            label: <><strong className="text-[#ededed]">매칭 컬럼</strong> — 그룹값과 비교할 컬럼을 고릅니다. (예: heroes.id 가 hero_001 같은 그룹값과 일치하는 행을 찾습니다)</>,
+            sub: "매칭 컬럼 값이 그룹값과 같거나, 행 id 자체가 그룹값과 같으면 그 행에 저장됩니다.",
+          },
+          {
+            label: <><IBtn icon={Wand2} label="N개 그룹 일괄 적용" variant="primary" /> 을 누르면 그룹마다 공식을 찾아 대상 테이블 행에 자동 저장합니다.</>,
+          },
+          {
+            label: <>결과는 그룹별로 표시됩니다 — <IBtn icon={CheckCircle2} label="성공" variant="success" /> / <IBtn icon={AlertTriangle} label="매칭 행 없음" /> / <IBtn icon={XCircle} label="오류" variant="danger" />.</>,
+            sub: "대상 테이블에 growth_* 컬럼이 없으면 \"저장은 되지만 화면에 안 보일 수 있다\"는 경고가 표시됩니다. 먼저 스키마에 세 컬럼을 추가해 두세요.",
+          },
+        ]}
+      />
+      <Divider />
+
+      <SectionLabel>자주 쓰는 시나리오</SectionLabel>
+      <div className="flex flex-col gap-3 mb-5">
+        <div className="rounded-lg bg-[#16161e] border border-[#2a2a3a] p-3">
+          <div className="text-[11px] font-semibold text-[#ededed] mb-2">시나리오 A — 새 방치형 게임을 공식으로 시작</div>
+          <StepList
+            items={[
+              { label: <>위자드에서 "방치형 RPG" 선택 → heroes 테이블에 growth_* 컬럼이 자동 포함됩니다.</> },
+              { label: <>heroes 행 입력: <span className="font-mono text-[#c4b5fd]">growth_type=power, growth_base=100, growth_factor=1.5</span></> },
+              { label: <>행 우측 <IBtn icon={TrendingUp} /> 로 Lv 1~100,000 수치를 즉시 확인합니다.</> },
+              { label: <>마음에 안 들면 파라미터를 수정하고 다시 <IBtn icon={TrendingUp} /> 로 확인합니다.</> },
+            ]}
+          />
+        </div>
+
+        <div className="rounded-lg bg-[#16161e] border border-[#2a2a3a] p-3">
+          <div className="text-[11px] font-semibold text-[#ededed] mb-2">시나리오 B — 기존 레벨표(1,000행)를 공식으로 전환</div>
+          <StepList
+            items={[
+              { label: <>hero_levels 테이블을 열고 툴바 <IBtn icon={Wand2} /> 버튼을 클릭합니다.</> },
+              { label: <>레벨 컬럼=level, 수치 컬럼=dps, 곡선 타입=power 로 설정합니다.</> },
+              { label: <>그룹 컬럼=hero_id 선택 → 예: "5개 그룹 감지". 특정 영웅을 골라 R²·오차를 미리 확인합니다.</> },
+              { label: <>일괄 적용: 적용 테이블=heroes, 매칭 컬럼=id 로 설정 후 <strong className="text-[#ededed]">5개 그룹 일괄 적용</strong>.</> },
+              { label: <>heroes 테이블로 가서 <IBtn icon={TrendingUp} /> 로 각 영웅의 공식 결과를 검증합니다.</> },
+            ]}
+          />
+        </div>
+
+        <div className="rounded-lg bg-[#16161e] border border-[#2a2a3a] p-3">
+          <div className="text-[11px] font-semibold text-[#ededed] mb-2">시나리오 C — 목표 수치(앵커)에서 공식 거꾸로 찾기</div>
+          <div className="text-[11px] text-[#9a9aa3] leading-relaxed mb-2">
+            "레벨 1=100, 레벨 1000=500만" 같은 목표만 있을 때, 그 두 점을 지나는 공식을 거꾸로 찾을 수 있습니다.
+          </div>
+          <div className="px-3 py-2 rounded-lg bg-[#1e1e28] border border-[#2a2a3a] text-[11px] text-[#9a9aa3] font-mono">
+            &ldquo;fit_curve로 power 타입 파라미터 찾아줘, 레벨1=100 레벨1000=5000000&rdquo;
+          </div>
+          <div className="text-[10px] text-[#6b6b77] mt-2 leading-relaxed">
+            메모리 화면의 AI 대화창에 위처럼 요청하거나, ✦ 모달에서 두 점만 있는 임시 테이블로 피팅해도 됩니다.
+          </div>
+        </div>
+      </div>
+
+      <Tip>
+        전환 전에는 <IBtn icon={Save} label="스냅샷 저장" /> 으로 원본 레벨표를 백업해 두세요. 공식이 마음에 들지 않으면 언제든 되돌릴 수 있습니다.
+      </Tip>
+    </>
+  );
+}
+
 function EditorContent() {
   return (
     <>
@@ -299,6 +489,8 @@ function EditorContent() {
       <Tip>
         행 우측 <IBtn icon={StickyNote} /> 아이콘을 클릭해 해당 수치의 근거나 메모를 기록할 수 있습니다.
       </Tip>
+      <Divider />
+      <TableToFormulaContent />
     </>
   );
 }
@@ -482,7 +674,7 @@ function MemoryContent() {
 const SECTIONS = [
   { id: "home"       as Screen, label: "프로젝트",   Icon: Home,        title: "프로젝트",   subtitle: "게임 프로젝트를 생성하고 관리하는 시작점입니다.",          Content: HomeContent       },
   { id: "schema"     as Screen, label: "스키마",     Icon: Table2,      title: "스키마",     subtitle: "테이블 구조(컬럼)를 설계하는 화면입니다.",                  Content: SchemaContent     },
-  { id: "editor"     as Screen, label: "데이터",     Icon: Database,    title: "데이터",     subtitle: "수치 데이터를 직접 입력·편집하는 스프레드시트입니다.",        Content: EditorContent     },
+  { id: "editor"     as Screen, label: "데이터",     Icon: Database,    title: "데이터",     subtitle: "수치 데이터를 입력·편집하고, 레벨표를 무한 레벨 공식으로 전환합니다.", Content: EditorContent     },
   { id: "types"      as Screen, label: "타입",       Icon: Tags,        title: "타입",       subtitle: "컬럼에서 사용하는 선택지(enum) 목록을 관리합니다.",           Content: TypesContent      },
   { id: "balance"    as Screen, label: "밸런싱",     Icon: BarChart2,   title: "밸런싱",     subtitle: "테이블 수치의 이상값을 감지하고 밸런스를 분석합니다.",        Content: BalanceContent    },
   { id: "simulation" as Screen, label: "시뮬레이션", Icon: Play,        title: "시뮬레이션", subtitle: "수치를 시뮬레이션해 게임 플레이 감을 미리 예측합니다.",       Content: SimulationContent },
