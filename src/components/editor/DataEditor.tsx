@@ -286,19 +286,46 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
     return r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1;
   };
 
+  // Electron clipboard 우선, 없으면 navigator.clipboard 폴백.
+  const elApi = () => (typeof window !== "undefined" ? (window as unknown as Record<string, { readClipboard?: () => string; writeClipboard?: (t: string) => void }>)["electronAPI"] : undefined);
+
   // Ctrl+C: 선택 범위(없으면 activeCell 단일)를 TSV로 클립보드 복사.
+  // Electron API → navigator.clipboard → execCommand 순으로 시도.
   const copySelection = async () => {
     const range = selectionRange();
     if (!range) return;
     const tsv = cellsToTSV(filteredRows, visibleColumns, range);
-    try { await navigator.clipboard.writeText(tsv); } catch (e) { console.error(e); }
+
+    const api = elApi();
+    if (api?.writeClipboard) {
+      try { api.writeClipboard(tsv); return; } catch { /* fall through */ }
+    }
+    if (navigator?.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(tsv); return; } catch { /* fall through */ }
+    }
+    try {
+      const el = document.createElement("textarea");
+      el.value = tsv;
+      el.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    } catch { /* ignore */ }
   };
 
   // Ctrl+V: 클립보드 TSV를 activeCell 기준으로 매핑 → 행당 1 POST → grid.batchUpdate(1 undo 엔트리).
   const pasteSelection = async () => {
     if (!activeCell) return;
-    let tsv: string;
-    try { tsv = await navigator.clipboard.readText(); } catch (e) { console.error(e); return; }
+    let tsv = "";
+
+    const api = elApi();
+    if (api?.readClipboard) {
+      try { tsv = api.readClipboard(); } catch { /* fall through */ }
+    }
+    if (!tsv && navigator?.clipboard?.readText) {
+      try { tsv = await navigator.clipboard.readText(); } catch { /* fall through */ }
+    }
     if (!tsv) return;
     const anchorRowIndex = filteredRows.findIndex((r) => r.id === activeCell.rowId);
     const anchorColIndex = visibleColumns.findIndex((c) => c.name === activeCell.col);
@@ -311,15 +338,19 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
   };
 
   // 단축키 핸들러를 ref에 보관(매 렌더 갱신)해 stale closure 없이 [] deps 리스너에서 최신 값 호출.
-  const shortcutRef = useRef({ handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell });
-  shortcutRef.current = { handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell };
+  const shortcutRef = useRef({ handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell, setActiveCell, setAnchorCell });
+  shortcutRef.current = { handleUndo, handleRedo, copySelection, pasteSelection, editing, activeCell, setActiveCell, setAnchorCell };
+  // filteredRows·visibleColumns는 아래 선언 후 별도 ref로 관리 (선언 순서 제약 우회)
+  const filteredRowsRef = useRef<Row[]>([]);
+  const visibleColumnsRef = useRef<Column[]>([]);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       const isUndoRedo = (e.metaKey || e.ctrlKey) && (k === "z" || k === "y");
       const isCopy = (e.metaKey || e.ctrlKey) && k === "c";
       const isPaste = (e.metaKey || e.ctrlKey) && k === "v";
-      if (!isUndoRedo && !isCopy && !isPaste) return;
+      const isTab = e.key === "Tab";
+      if (!isUndoRedo && !isCopy && !isPaste && !isTab) return;
       // 가드: 셀 편집 중이거나 입력 요소에 포커스가 있으면(채팅·검색) 브라우저 기본 동작 우선.
       const el = document.activeElement;
       const tag = el?.tagName.toLowerCase();
@@ -336,12 +367,30 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         shortcutRef.current.pasteSelection();
         return;
       }
+      if (isTab) {
+        e.preventDefault();
+        const { activeCell: ac, setActiveCell: setAC, setAnchorCell: setAnc } = shortcutRef.current;
+        const rows = filteredRowsRef.current;
+        const cols = visibleColumnsRef.current;
+        if (!ac) return;
+        const rowIdx = rows.findIndex((r) => r.id === ac.rowId);
+        const colIdx = cols.findIndex((c) => c.name === ac.col);
+        if (rowIdx < 0 || colIdx < 0) return;
+        let nextCol = colIdx + (e.shiftKey ? -1 : 1);
+        let nextRow = rowIdx;
+        if (nextCol >= cols.length) { nextCol = 0; nextRow = Math.min(rowIdx + 1, rows.length - 1); }
+        else if (nextCol < 0) { nextCol = cols.length - 1; nextRow = Math.max(rowIdx - 1, 0); }
+        const next = { rowId: rows[nextRow].id, col: cols[nextCol].name };
+        setAC(next);
+        setAnc(next);
+        return;
+      }
       const isRedo = k === "y" || (k === "z" && e.shiftKey);
       e.preventDefault();
       if (isRedo) shortcutRef.current.handleRedo(); else shortcutRef.current.handleUndo();
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => document.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
   const runBalance = async () => {
@@ -526,6 +575,8 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
 
   // 컬럼 가시성 (id 컬럼은 항상 표시)
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.name));
+  filteredRowsRef.current = filteredRows;
+  visibleColumnsRef.current = visibleColumns;
 
   // CSV 내보내기
   const saveBlob = async (blob: Blob, fileName: string, mimeType: string, ext: string) => {
@@ -658,24 +709,24 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* 툴바 */}
           <div className="h-11 border-b border-[#2a2a2f] flex items-center px-3 gap-1 flex-shrink-0">
-            <Tooltip label="선택 삭제"><Btn disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn></Tooltip>
+            <Tooltip label="선택 삭제"><Btn tabIndex={-1} disabled={selectedRowIds.size === 0} onClick={deleteSelected}><Trash2 size={11} /></Btn></Tooltip>
             {selectedRowIds.size > 1 && <span className="text-[11px] text-[#8b5cf6] px-1">{selectedRowIds.size}행</span>}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Tooltip label="실행 취소 (Cmd/Ctrl+Z)"><Btn disabled={!grid.canUndo} onClick={handleUndo}><Undo2 size={11} /></Btn></Tooltip>
-            <Tooltip label="다시 실행 (Cmd/Ctrl+Shift+Z)"><Btn disabled={!grid.canRedo} onClick={handleRedo}><Redo2 size={11} /></Btn></Tooltip>
+            <Tooltip label="실행 취소 (Cmd/Ctrl+Z)"><Btn tabIndex={-1} disabled={!grid.canUndo} onClick={handleUndo}><Undo2 size={11} /></Btn></Tooltip>
+            <Tooltip label="다시 실행 (Cmd/Ctrl+Shift+Z)"><Btn tabIndex={-1} disabled={!grid.canRedo} onClick={handleRedo}><Redo2 size={11} /></Btn></Tooltip>
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Tooltip label="CSV 임포트"><Btn onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn></Tooltip>
+            <Tooltip label="CSV 임포트"><Btn tabIndex={-1} onClick={() => fileRef.current?.click()}><Upload size={11} /></Btn></Tooltip>
             <div className="relative">
-              <Tooltip label="내보내기 (CSV / JSON)"><Btn disabled={!selectedId} onClick={() => setShowExportMenu((v) => !v)}><Download size={11} /></Btn></Tooltip>
+              <Tooltip label="내보내기 (CSV / JSON)"><Btn tabIndex={-1} disabled={!selectedId} onClick={() => setShowExportMenu((v) => !v)}><Download size={11} /></Btn></Tooltip>
               {showExportMenu && (
                 <div className="absolute top-full left-0 mt-1 bg-[#1a1a1f] border border-[#2a2a2f] rounded-lg shadow-xl z-50 py-1 min-w-[80px]" onMouseLeave={() => setShowExportMenu(false)}>
-                  <button className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { csvExport(); setShowExportMenu(false); }}>CSV</button>
-                  <button className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { exportJson(); setShowExportMenu(false); }}>JSON</button>
+                  <button tabIndex={-1} className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { csvExport(); setShowExportMenu(false); }}>CSV</button>
+                  <button tabIndex={-1} className="w-full text-left px-3 py-1.5 text-[11px] text-[#ededed] hover:bg-[#2a2a2f]" onClick={() => { exportJson(); setShowExportMenu(false); }}>JSON</button>
                 </div>
               )}
             </div>
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Tooltip label="스냅샷 저장"><Btn disabled={!selectedId} onClick={saveSnapshot}><Save size={11} /></Btn></Tooltip>
+            <Tooltip label="스냅샷 저장"><Btn tabIndex={-1} disabled={!selectedId} onClick={saveSnapshot}><Save size={11} /></Btn></Tooltip>
             {snapshots.length > 0 && (
               <Tooltip label="스냅샷 복원">
                 <select
@@ -690,12 +741,12 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
             )}
             {snapshots.length >= 2 && (
               <Tooltip label="스냅샷 비교">
-                <Btn disabled={!selectedId} onClick={() => { setShowDiff(true); setDiffResult(null); }}><GitCompare size={11} /></Btn>
+                <Btn tabIndex={-1} disabled={!selectedId} onClick={() => { setShowDiff(true); setDiffResult(null); }}><GitCompare size={11} /></Btn>
               </Tooltip>
             )}
             <div className="w-px h-4 bg-[#2a2a2f] mx-1" />
-            <Tooltip label="성장 곡선 생성"><Btn disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn></Tooltip>
-            <Tooltip label="AI 밸런스 분석"><Btn onClick={runBalance}><Sparkles size={11} /></Btn></Tooltip>
+            <Tooltip label="성장 곡선 생성"><Btn tabIndex={-1} disabled={!selectedId} onClick={() => setShowCurve(true)}><TrendingUp size={11} /></Btn></Tooltip>
+            <Tooltip label="AI 밸런스 분석"><Btn tabIndex={-1} onClick={runBalance}><Sparkles size={11} /></Btn></Tooltip>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file || !selectedId) return;
@@ -724,6 +775,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                 <tr className="bg-[#16161a]">
                   <th className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-[#6b6b77] w-7 text-center relative">
                     <button
+                      tabIndex={-1}
                       onClick={() => setShowColToggle((v) => !v)}
                       title="컬럼 표시/숨김"
                       className="text-[#4a4a55] hover:text-[#ededed] align-middle"
@@ -815,6 +867,18 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" && !isComposingRef.current && !e.nativeEvent.isComposing) saveCell(row, c.name, e.currentTarget.value);
                                 if (e.key === "Escape") setEditing(null);
+                                if (e.key === "Tab") {
+                                  e.preventDefault();
+                                  saveCell(row, c.name, e.currentTarget.value);
+                                  const rowIdx = filteredRows.findIndex((r) => r.id === row.id);
+                                  const colIdx = visibleColumns.findIndex((col) => col.name === c.name);
+                                  let nextCol = colIdx + (e.shiftKey ? -1 : 1);
+                                  let nextRow = rowIdx;
+                                  if (nextCol >= visibleColumns.length) { nextCol = 0; nextRow = Math.min(rowIdx + 1, filteredRows.length - 1); }
+                                  else if (nextCol < 0) { nextCol = visibleColumns.length - 1; nextRow = Math.max(rowIdx - 1, 0); }
+                                  const next = { rowId: filteredRows[nextRow].id, col: visibleColumns[nextCol].name };
+                                  setActiveCell(next); setAnchorCell(next);
+                                }
                               }}
                             />
                           ) : (
@@ -831,6 +895,7 @@ export function DataEditor({ projectId, onNavigate }: { projectId: string; onNav
                       return (
                         <td className="px-1.5 py-1.5 border-b border-[#2a2a2f] text-center w-7">
                           <button
+                            tabIndex={-1}
                             onClick={(e) => { e.stopPropagation(); setAnnotationTarget({ rowId: row.id }); setNoteInput(""); }}
                             className={`p-1 rounded hover:bg-[#2a2a2f] transition-colors ${hasNote ? "text-[#c4b5fd]" : "text-[#3a3a42]"}`}
                             title={hasNote ? "메모 있음" : "메모 추가"}

@@ -1,0 +1,14 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJ_DIR="$(cd "$SCRIPT_DIR/../../../" && pwd)"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  . "$HOME/.nvm/nvm.sh"
+fi
+ELECTRON="$PROJ_DIR/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+if [ ! -f "$ELECTRON" ]; then
+  osascript -e 'display alert "Electron을 찾을 수 없습니다" message "npm install을 실행하세요." as critical'
+  exit 1
+fi
+cd "$PROJ_DIR"
+exec "$ELECTRON" "$PROJ_DIR"

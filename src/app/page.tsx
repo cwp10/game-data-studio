@@ -9,6 +9,7 @@ import { SimulationView } from "@/components/simulation/SimulationView";
 import { MemoryView } from "@/components/memory/MemoryView";
 import { TypeRegistry } from "@/components/types/TypeRegistry";
 import { EconomySim } from "@/components/economy/EconomySim";
+import { HelpModal } from "@/components/ui/HelpModal";
 
 export type Screen = "home" | "schema" | "editor" | "balance" | "simulation" | "memory" | "types" | "economy";
 
@@ -16,6 +17,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const navigate = (s: Screen, pid?: string, pname?: string) => {
     if (pid) setProjectId(pid);
@@ -36,7 +38,7 @@ export default function App() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar current={screen} onChange={(s) => setScreen(s)} />
+        <Sidebar current={screen} onChange={(s) => setScreen(s)} onHelp={() => setHelpOpen(true)} />
 
         <div className="flex flex-1 overflow-hidden">
           {screen === "home" && <ProjectHome onNavigate={navigate} />}
@@ -69,6 +71,8 @@ export default function App() {
           )}
         </div>
       </div>
+
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} initialScreen={screen} />
     </div>
   );
 }

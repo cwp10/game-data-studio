@@ -10,6 +10,7 @@
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3001 && electron .\"",
     "electron:build": "next build && node scripts/prepare-electron-build.js && electron-builder --mac",
+    "build:app": "bash scripts/build-dev-app.sh",
     "init-db": "node --import tsx ./scripts/init-db.ts",
     "seed-demo": "node --import tsx ./scripts/seed-demo.ts",
     "mcp": "node --import tsx ./src/lib/mcp/server.ts",

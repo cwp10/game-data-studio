@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText, Tags, Coins, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Home, Table2, Database, BarChart2, Play, Settings, NotebookText, Tags, Coins, PanelLeftClose, PanelLeftOpen, HelpCircle } from "lucide-react";
 import { type Screen } from "@/app/page";
 
 const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
@@ -14,7 +14,7 @@ const NAV: { id: Screen; Icon: React.ElementType; label: string }[] = [
   { id: "memory",     Icon: NotebookText, label: "메모리" },
 ];
 
-export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: Screen) => void }) {
+export function Sidebar({ current, onChange, onHelp }: { current: Screen; onChange: (s: Screen) => void; onHelp?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { if (localStorage.getItem("sidebar:collapsed") === "1") setCollapsed(true); }, []);
 
@@ -54,8 +54,18 @@ export function Sidebar({ current, onChange }: { current: Screen; onChange: (s: 
         ))}
       </nav>
 
-      {/* 하단 설정 */}
+      {/* 하단 도움말 + 설정 */}
       <div className="border-t border-[#2a2a2f] pb-2 pt-1">
+        {onHelp && (
+          <button
+            onClick={onHelp}
+            title={collapsed ? "도움말" : undefined}
+            className={`w-full flex items-center gap-3 ${collapsed ? "justify-center px-0" : "px-4"} py-3 text-left text-[#6b6b77] border-l-2 border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3] transition-colors`}
+          >
+            <HelpCircle size={16} />
+            {!collapsed && <span className="text-[12px]">도움말</span>}
+          </button>
+        )}
         <button
           title={collapsed ? "설정" : undefined}
           className={`w-full flex items-center gap-3 ${collapsed ? "justify-center px-0" : "px-4"} py-3 text-left text-[#6b6b77] border-l-2 border-transparent hover:bg-[#1a1a1c] hover:text-[#9a9aa3] transition-colors`}

@@ -1,11 +1,11 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, globalShortcut } = require("electron");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const http = require("node:http");
 
 app.setName("Game Data Studio");
+app.commandLine.appendSwitch("disable-http-cache");
 
-const PROJECT_DIR = path.resolve(__dirname, "..");
 const PORT = 3001;
 const URL = `http://127.0.0.1:${PORT}`;
 
@@ -46,34 +46,75 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    if (mainWindow) mainWindow.webContents.toggleDevTools();
+  });
+}
+
+async function startProductionServer() {
+  const standalonePath = path.join(process.resourcesPath, ".next", "standalone");
+  const dataDir = path.join(process.resourcesPath, "data");
+  const { existsSync } = require("node:fs");
+
+  if (!existsSync(path.join(standalonePath, "server.js"))) {
+    console.error("standalone server.js not found:", standalonePath);
+    return false;
+  }
+
+  // standalone 서버를 메인 프로세스에서 직접 실행 (fork/spawn 없이 가장 안정적)
+  const prevCwd = process.cwd();
+  try {
+    process.chdir(standalonePath);
+    process.env.PORT = String(PORT);
+    process.env.HOSTNAME = "127.0.0.1";
+    process.env.GDS_DATA_DIR = dataDir;
+    process.env.NODE_ENV = "production";
+    require(standalonePath + "/server.js");
+  } catch (e) {
+    if (e.code === "EADDRINUSE") {
+      // 포트가 이미 사용 중이면 기존 서버 활용
+      console.log("Port already in use, using existing server");
+    } else {
+      console.error("Failed to start standalone server:", e);
+      process.chdir(prevCwd);
+      return false;
+    }
+  }
+  return true;
 }
 
 app.whenReady().then(async () => {
-  // 서버가 이미 떠 있으면(dev 모드) 그냥 사용
-  if (await isUp()) {
-    createWindow();
-    return;
+  if (app.isPackaged) {
+    // 프로덕션: standalone 서버 직접 실행
+    await startProductionServer();
+    const ok = await waitForServer(15000);
+    if (!ok) { app.quit(); return; }
+  } else {
+    // 개발: 이미 실행 중인 서버 재사용
+    if (await isUp()) {
+      createWindow();
+      return;
+    }
+    const PROJECT_DIR = path.resolve(__dirname, "..");
+    const { existsSync } = require("node:fs");
+    const hasBuild = existsSync(path.join(PROJECT_DIR, ".next", "BUILD_ID"));
+    const script = hasBuild ? "start" : "dev";
+    serverProc = spawn("npm", ["run", script], {
+      cwd: PROJECT_DIR,
+      shell: true,
+      stdio: "inherit",
+      env: { ...process.env, PORT: String(PORT) },
+    });
+    const ok = await waitForServer();
+    if (!ok) { app.quit(); return; }
   }
 
-  // next build가 있으면 next start, 없으면 next dev
-  const { existsSync } = require("node:fs");
-  const hasBuild = existsSync(path.join(PROJECT_DIR, ".next", "BUILD_ID"));
-  const script = hasBuild ? "start" : "dev";
-
-  serverProc = spawn("npm", ["run", script], {
-    cwd: PROJECT_DIR,
-    shell: true,
-    stdio: "inherit",
-    env: { ...process.env, PORT: String(PORT) },
-  });
-
-  const ok = await waitForServer();
-  if (!ok) { app.quit(); return; }
   createWindow();
 });
 
 app.on("window-all-closed", () => {
   if (serverProc) serverProc.kill();
+  globalShortcut.unregisterAll();
   if (process.platform !== "darwin") app.quit();
 });
 
