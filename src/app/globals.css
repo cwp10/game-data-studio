@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind v4는 hover: 를 @media (hover:hover) 안에 래핑한다.
+   Electron(데스크탑 전용)에서는 이 미디어쿼리 평가가 불안정할 수 있으므로
+   :hover 직접 선택자로 재정의해 모든 hover 스타일이 항상 동작하도록 한다. */
+@variant hover (&:hover);
+
 * { box-sizing: border-box; }
 
 body {
