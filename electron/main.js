@@ -100,11 +100,15 @@ app.whenReady().then(async () => {
     const ok = await waitForServer(15000);
     if (!ok) { app.quit(); return; }
   } else {
-    // 개발: 이미 실행 중인 서버 재사용
-    if (await isUp()) {
-      createWindow();
-      return;
-    }
+    // 개발: 빌드 후 CSS 해시가 바뀌므로, 기존 서버를 재사용하지 않고 항상 교체한다.
+    const { execSync } = require("node:child_process");
+    try {
+      const pids = execSync(`lsof -ti:${PORT}`, { encoding: "utf8" }).trim();
+      if (pids) {
+        execSync(`kill -9 ${pids}`);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch {}
     const PROJECT_DIR = path.resolve(__dirname, "..");
     const { existsSync } = require("node:fs");
     const hasBuild = existsSync(path.join(PROJECT_DIR, ".next", "BUILD_ID"));
