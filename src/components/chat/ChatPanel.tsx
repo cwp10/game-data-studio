@@ -57,9 +57,16 @@ export function ChatPanel({
   // 언마운트 시 진행 중인 스트림을 중단해 claude/MCP 프로세스 누수와 unmounted setState 를 막는다.
   useEffect(() => () => { mountedRef.current = false; abortRef.current?.abort(); }, []);
 
+  // 히스토리 로드·스트리밍 완료 시 즉시 맨 아래로 (애니메이션 없이)
   useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "instant" });
+  }, [messages]);
+
+  // 스트리밍 중 새 토큰이 올 때만 smooth 스크롤
+  useEffect(() => {
+    if (!streaming && !liveText && !liveTools.length) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, liveText, liveTools, streaming]);
+  }, [liveText, liveTools, streaming]);
 
   const send = async () => {
     const text = input.trim();
