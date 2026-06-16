@@ -14,9 +14,19 @@ let serverProc = null;
 
 function isUp() {
   return new Promise((resolve) => {
-    const req = http.get(URL, (res) => { res.destroy(); resolve(true); });
+    // 포트 응답만 확인하면 서버가 아직 초기화 중일 수 있어 흰 화면이 뜸.
+    // /api/projects 가 유효한 JSON 을 반환할 때만 true — DB·라우트 모두 준비된 상태.
+    const req = http.get(`${URL}/api/projects`, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        try { JSON.parse(body); resolve(true); }
+        catch { resolve(false); }
+      });
+      res.on("error", () => resolve(false));
+    });
     req.on("error", () => resolve(false));
-    req.setTimeout(800, () => { req.destroy(); resolve(false); });
+    req.setTimeout(3000, () => { req.destroy(); resolve(false); });
   });
 }
 
