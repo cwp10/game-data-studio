@@ -1,0 +1,30 @@
+# Build artifacts
+.next/
+out/
+dist/
+build/
+
+# Electron app bundle
+Game Data Studio.app/
+
+# Dependencies
+node_modules/
+
+# Database & binary data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
