@@ -1,6 +1,6 @@
 # 턴제/액션 RPG (battle_rpg) — 스키마 사양
 
-> 단일 출처: `game-data-feature/_workspace/00_genre_contract.md §5.4`
+> 이 파일이 `battle_rpg` 테이블·컬럼 사양의 단일 출처(SSOT)다. 충돌 시 이 파일이 우선한다.
 > `character_levels`가 하이브리드 전개 테이블, `exp_curves`는 별도 일반 테이블(레벨업 경험치).
 
 ## 테이블 (7개 메타 + 1개 전개)

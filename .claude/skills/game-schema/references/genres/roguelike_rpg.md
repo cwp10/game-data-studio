@@ -1,6 +1,6 @@
 # 로그라이크 RPG (roguelike_rpg) — 스키마 사양
 
-> 단일 출처: `game-data-feature/_workspace/00_genre_contract.md §5.5`
+> 이 파일이 `roguelike_rpg` 테이블·컬럼 사양의 단일 출처(SSOT)다. 충돌 시 이 파일이 우선한다.
 > 성장 축 = 런/층 스케일링 + 아이템 시너지. 전개 테이블 = `floor_scaling`(층별 배율, `floor_no` 키 — **FK 아님**).
 
 ## 테이블 (8개 메타 + 1개 전개)

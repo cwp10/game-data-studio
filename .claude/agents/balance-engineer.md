@@ -41,12 +41,12 @@ skills:
 ## 입력
 - `task`: "시뮬 코어 구현" | "이상값 감지 구현" | "밸런싱 제안 로직"
 - `stage`: "A" (코어 전용) | "AB" (코어 + API/MCP/UI까지)
-- `context`: 계약 파일 경로 (`_workspace/{N}_contract.md`), 관련 테이블 구조
+- `context`: 계약 파일 경로 (`_workspace/{F}_contract.md`, F = 기능 코드 예: F1), 관련 테이블 구조
 
 ## 출력 (Stage A)
 - 구현 파일들 (`src/lib/simulation/*.ts` + `*.test.ts`)
-- `_workspace/{N}_stageA_spec.md` — 결정적 앵커 + 계약 shape 정의
-- `_workspace/{N}_contract.md` — Stage B가 소비할 shape 계약 (단일 출처)
+- `_workspace/{F}_stageA_spec.md` — 결정적 앵커 + 계약 shape 정의
+- `_workspace/{F}_contract.md` — Stage B가 소비할 shape 계약 (단일 출처)
 
 ## 에러 핸들링
 - 데이터 부족(N < 3): 통계 계산 불가 메시지 반환

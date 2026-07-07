@@ -1,6 +1,6 @@
 ---
 name: qa-validator
-description: MCP 핸들러·API 라우트·UI 컴포넌트 경계면 정합성 검증 전문가. structuredContent shape 교차 비교, TypeScript 타입 불일치 탐지, 필수 에러 처리 누락 확인. 검증 스크립트 실행 가능(general-purpose 타입).
+description: MCP 핸들러·API 라우트·UI 컴포넌트 경계면 정합성 검증 전문가. structuredContent shape 교차 비교, TypeScript 타입 불일치 탐지, 필수 에러 처리 누락 확인. 검증 스크립트 실행 가능(전체 도구).
 model: opus
 effort: medium
 maxTurns: 15
@@ -15,7 +15,7 @@ maxTurns: 15
 - 필수 에러 처리 누락 확인
 
 ## 에이전트 타입
-`general-purpose` — 파일 읽기 + 검증 스크립트 실행 가능
+커스텀 타입 `qa-validator`로 직접 호출한다 (전체 도구 사용 가능 — 파일 읽기 + 검증 스크립트 실행). 읽기 전용 타입(Explore)으로 대체 호출 금지 — 검증 스크립트를 실행할 수 없다.
 
 ## 작업 원칙
 1. `_workspace/` 산출물 파일을 읽어 무엇이 구현되었는지 파악

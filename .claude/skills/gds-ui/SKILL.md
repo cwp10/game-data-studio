@@ -39,7 +39,7 @@ const anomalyClass = {
 
 ---
 
-## 5개 화면 구조
+## 8개 화면 구조
 
 ### 공통 레이아웃
 ```tsx
@@ -52,15 +52,17 @@ const anomalyClass = {
     {screen === 'editor'     && <DataEditor />}
     {screen === 'balance'    && <BalancePanel />}
     {screen === 'simulation' && <SimulationView />}
+    {screen === 'memory'     && <MemoryView />}
+    {screen === 'types'      && <TypeRegistry />}
+    {screen === 'economy'    && <EconomySim />}
   </main>
 </div>
 ```
 
-### Sidebar 아이콘 순서
+### Sidebar 네비 순서 (lucide 아이콘)
 ```
-⌂ home → ⊞ schema → ▤ editor → ▦ balance → ▷ simulation
-(구분선)
-⚙ settings
+home(프로젝트, Home) → schema(스키마, Table2) → editor(데이터, Database) → types(타입, Tags)
+→ balance(밸런싱, BarChart2) → simulation(시뮬레이션, Play) → economy(경제, Coins) → memory(메모리, NotebookText)
 ```
 
 ---

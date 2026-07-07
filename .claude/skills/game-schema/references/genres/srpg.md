@@ -1,6 +1,6 @@
 # SRPG 전략 (srpg) — 스키마 사양
 
-> 단일 출처: `game-data-feature/_workspace/00_genre_contract.md §5.6`
+> 이 파일이 `srpg` 테이블·컬럼 사양의 단일 출처(SSOT)다. 충돌 시 이 파일이 우선한다.
 > 핵심 = 성장률(growth rate). `growth_type` 미사용. units의 `growth_*`(%) 성장률을 `unit_levels`로 전개.
 
 ## 테이블 (6개 메타 + 1개 전개)

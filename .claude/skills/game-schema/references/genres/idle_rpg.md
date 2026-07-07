@@ -1,6 +1,6 @@
 # 방치형 RPG (idle_rpg) — 스키마 사양
 
-> 단일 출처: `game-data-feature/_workspace/00_genre_contract.md §5.2`
+> 이 파일이 `idle_rpg` 테이블·컬럼 사양의 단일 출처(SSOT)다. 충돌 시 이 파일이 우선한다.
 
 ## 테이블 (6개 메타 + 1개 전개)
 

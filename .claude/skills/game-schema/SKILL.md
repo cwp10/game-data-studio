@@ -1,10 +1,10 @@
 ---
 name: game-schema
-description: 게임 장르별 DB 스키마 설계 패턴. 수집형 RPG, 방치형 RPG 등 장르에 맞는 테이블/컬럼/관계 구조를 제공한다. "스키마 설계", "테이블 구조", "장르별 데이터 모델", "어떤 테이블이 필요해" 등 게임 데이터 모델링 요청 시 반드시 이 스킬을 사용한다.
+description: RPG 6종 전용 DB 스키마 설계 패턴. 수집형 RPG(collection_rpg)·방치형 RPG(idle_rpg)·MMORPG·턴제/액션 RPG(battle_rpg)·로그라이크 RPG(roguelike_rpg)·SRPG(srpg) 장르에 맞는 테이블/컬럼/관계 구조를 제공한다. "스키마 설계", "테이블 구조", "장르별 데이터 모델", "어떤 테이블이 필요해", "MMORPG 스키마", "로그라이크 테이블", "SRPG 데이터 모델" 등 게임 데이터 모델링 요청 시 반드시 이 스킬을 사용한다.
 ---
 
 > **RPG 6종 전용.** 지원 장르 코드: `collection_rpg`, `idle_rpg`, `mmorpg`, `battle_rpg`, `roguelike_rpg`, `srpg`.
-> 테이블·컬럼 사양의 단일 출처는 `game-data-feature/_workspace/00_genre_contract.md §5`다. 충돌 시 계약이 우선한다.
+> 테이블·컬럼 사양의 단일 출처는 `references/genres/<genre>.md` 각 장르 파일이다. 충돌 시 장르 파일이 우선한다.
 
 작업 시작 시 해당 장르 파일을 읽는다:
 - `references/genres/collection_rpg.md` — 수집형 RPG
@@ -67,7 +67,7 @@ generate_curve({ table_id: levels_id, /* base, growth_type, level 범위 */ })
 
 ## 설계 원칙
 
-- 계약 §5 테이블·컬럼을 글자까지 그대로 사용한다 — 임의 추가·재명명 금지.
+- 장르 파일의 테이블·컬럼을 글자까지 그대로 사용한다 — 임의 추가·재명명 금지.
 - 수치 컬럼은 grade/role로 그룹화 가능하게 — 밸런싱 비교용.
 - `roguelike_rpg`의 `floor_scaling.floor_no`는 값이 같아도 FK가 아님. `set_relation` 금지.
 - `srpg`의 `classes.promote_to_id`는 자기참조 — NULL이면 최고 병종.
