@@ -1,9 +1,11 @@
 name: CI
 
+# 결정적 게이트만 검증한다 — 타입체크 / 단위 테스트 / 프로덕션 빌드.
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   test:
@@ -14,8 +16,13 @@ jobs:
         with:
           node-version: "20"
           cache: npm
+      # electron 바이너리는 CI에서 불필요(타입체크/테스트/빌드만 수행) — 다운로드 건너뛰어 install 가속.
       - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - name: Typecheck
         run: npm exec tsc -- --noEmit
       - name: Unit tests
         run: npm test
+      - name: Production build
+        run: npm run build
