@@ -5,11 +5,11 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "lsof -ti:3001 | xargs kill -9 2>/dev/null; NODE_OPTIONS=--max-old-space-size=8192 next dev -p 3001",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start -p 3001",
     "electron": "electron .",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3001 && electron .\"",
-    "electron:build": "next build && node scripts/prepare-electron-build.js && electron-builder --mac",
+    "electron:build": "next build --webpack && node scripts/prepare-electron-build.js && electron-builder --mac",
     "build:app": "bash scripts/build-dev-app.sh",
     "init-db": "node --import tsx ./scripts/init-db.ts",
     "seed-demo": "node --import tsx ./scripts/seed-demo.ts",
@@ -31,6 +31,11 @@
       {
         "from": ".next/standalone",
         "to": ".next/standalone",
+        "filter": ["**/*"]
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": ".next/standalone/node_modules",
         "filter": ["**/*"]
       },
       {

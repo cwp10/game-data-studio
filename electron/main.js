@@ -6,6 +6,10 @@ const http = require("node:http");
 app.setName("Game Data Studio");
 app.commandLine.appendSwitch("disable-http-cache");
 
+// GUI 런처(Finder/Dock)에서 실행되면 PATH가 최소화되어(Homebrew 등) node를 못 찾으므로 보강.
+// 이 PATH는 spawn 한 Next 서버 프로세스에도 그대로 상속된다.
+process.env.PATH = `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`;
+
 const PORT = 3001;
 const URL = `http://127.0.0.1:${PORT}`;
 
@@ -64,32 +68,28 @@ function createWindow() {
 async function startProductionServer() {
   const standalonePath = path.join(process.resourcesPath, ".next", "standalone");
   const dataDir = path.join(process.resourcesPath, "data");
+  const serverJs = path.join(standalonePath, "server.js");
   const { existsSync } = require("node:fs");
 
-  if (!existsSync(path.join(standalonePath, "server.js"))) {
+  if (!existsSync(serverJs)) {
     console.error("standalone server.js not found:", standalonePath);
     return false;
   }
 
-  // standalone 서버를 메인 프로세스에서 직접 실행 (fork/spawn 없이 가장 안정적)
-  const prevCwd = process.cwd();
-  try {
-    process.chdir(standalonePath);
-    process.env.PORT = String(PORT);
-    process.env.HOSTNAME = "127.0.0.1";
-    process.env.GDS_DATA_DIR = dataDir;
-    process.env.NODE_ENV = "production";
-    require(standalonePath + "/server.js");
-  } catch (e) {
-    if (e.code === "EADDRINUSE") {
-      // 포트가 이미 사용 중이면 기존 서버 활용
-      console.log("Port already in use, using existing server");
-    } else {
-      console.error("Failed to start standalone server:", e);
-      process.chdir(prevCwd);
-      return false;
-    }
-  }
+  // 시스템 node 자식 프로세스로 실행 (Electron 프로세스 안에서 require 하지 않음).
+  // better-sqlite3 등 네이티브 모듈이 시스템 Node ABI로 빌드돼 있어 Electron 자체 ABI로
+  // 재빌드할 필요가 없다 — Electron 최신 버전과 better-sqlite3 프리빌드 바이너리 호환 문제 회피.
+  serverProc = spawn("node", [serverJs], {
+    cwd: standalonePath,
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      HOSTNAME: "127.0.0.1",
+      GDS_DATA_DIR: dataDir,
+      NODE_ENV: "production",
+    },
+    stdio: "inherit",
+  });
   return true;
 }
 
@@ -127,9 +127,13 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  if (serverProc) serverProc.kill();
+  // macOS 관례: 창을 닫아도 서버는 살려두고 dock에 남긴다(재활성화 시 재사용).
   globalShortcut.unregisterAll();
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  if (serverProc) serverProc.kill();
 });
 
 app.on("activate", () => {

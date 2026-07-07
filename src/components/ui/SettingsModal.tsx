@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X, Bot, Terminal, CheckCircle2, AlertCircle } from "lucide-react";
-import type { AIProvider, AppSettings } from "@/app/api/settings/route";
+import type { AIProvider, AppSettings } from "@/lib/settings";
 
 const PROVIDERS: { id: AIProvider; label: string; sub: string; icon: string }[] = [
   { id: "claude", label: "Claude CLI", sub: "Anthropic · claude 바이너리", icon: "🤖" },

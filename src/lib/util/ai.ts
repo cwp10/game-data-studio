@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readSettings } from "@/app/api/settings/route";
+import { readSettings } from "@/lib/settings";
 
 // ── Claude CLI ──────────────────────────────────────────────────────────────
 
