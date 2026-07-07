@@ -5,6 +5,7 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/project-memory/
+data/settings.json
 .env
 .env.local
 .DS_Store
@@ -12,4 +13,5 @@ data/project-memory/
 dist/
 tsconfig.tsbuildinfo
 pnpm-lock.yaml
+pnpm-workspace.yaml
 next-env.d.ts
